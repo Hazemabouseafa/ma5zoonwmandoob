@@ -1,0 +1,22 @@
+import { dbStore } from '@/lib/store';
+import InventoryClientView from '@/components/admin/InventoryClientView';
+
+export default async function AdminInventoryPage() {
+  const products = await dbStore.getProducts();
+  const batches = await dbStore.getBatches();
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-black text-slate-900">إدارة المخزون وتشغيلات الوارد (FIFO)</h1>
+          <p className="text-sm text-slate-500">
+            تتبع تشغيلات السلع سريعة التلف (الألبان: 1 يوم، العصائر: 7-10 أيام) واحتساب الصلاحية آلياً
+          </p>
+        </div>
+      </div>
+
+      <InventoryClientView products={products} batches={batches} />
+    </div>
+  );
+}
