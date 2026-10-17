@@ -13,6 +13,8 @@ import {
   Settlement,
   BatchStatus,
   Category,
+  AdvanceRequest,
+  AdvanceStatus,
 } from '@/types';
 
 interface DatabaseSchema {
@@ -26,6 +28,7 @@ interface DatabaseSchema {
   returns: ReturnItem[];
   collections: Collection[];
   settlements: Settlement[];
+  advances: AdvanceRequest[];
 }
 
 function getDbFilePath(): string {
@@ -80,6 +83,7 @@ function getInitialData(): DatabaseSchema {
     returns: [],
     collections: [],
     settlements: [],
+    advances: [],
   };
 }
 
@@ -232,6 +236,7 @@ class DatabaseStore {
           if (!raw.collections || !Array.isArray(raw.collections)) raw.collections = [];
           if (!raw.settlements || !Array.isArray(raw.settlements)) raw.settlements = [];
           if (!raw.repInventory || !Array.isArray(raw.repInventory)) raw.repInventory = [];
+          if (!raw.advances || !Array.isArray(raw.advances)) raw.advances = [];
 
           this.data = raw;
           this.lastRemoteSyncTime = remoteTime;
@@ -318,6 +323,11 @@ class DatabaseStore {
 
         if (!this.data.categories || !Array.isArray(this.data.categories)) {
           this.data.categories = [];
+          this.persistToDisk();
+        }
+
+        if (!this.data.advances || !Array.isArray(this.data.advances)) {
+          this.data.advances = [];
           this.persistToDisk();
         }
       } else {
@@ -1195,6 +1205,10 @@ class DatabaseStore {
         };
       });
 
+    const pendingAdvancesCount = (this.data.advances || []).filter(
+      (a) => a.status === 'pending'
+    ).length;
+
     return {
       todaySalesAmount,
       todayCashCollected,
@@ -1204,7 +1218,80 @@ class DatabaseStore {
       topClients,
       repPerformance,
       totalInvoicesCount: this.data.invoices.length,
+      pendingAdvancesCount,
     };
+  }
+
+  // -------------------------------------------------------------
+  // ADVANCES (سلف المناديب المالية)
+  // -------------------------------------------------------------
+  async getAdvances(repId?: string): Promise<(AdvanceRequest & { rep: User })[]> {
+    await this.ensureLoaded();
+    const list = this.data.advances || [];
+    const filtered = repId ? list.filter((a) => a.repId === repId) : list;
+    return filtered.map((adv) => ({
+      ...adv,
+      rep: this.data.users.find((u) => u.id === adv.repId) || {
+        id: adv.repId,
+        name: 'مندوب',
+        username: '',
+        password: '',
+        role: 'rep',
+        isActive: false,
+        createdAt: '',
+      },
+    }));
+  }
+
+  async createAdvanceRequest(data: {
+    repId: string;
+    amount: number;
+    reason: string;
+  }): Promise<AdvanceRequest> {
+    return this.transaction((db) => {
+      if (!db.advances) db.advances = [];
+      const rep = db.users.find((u) => u.id === data.repId);
+      if (!rep) throw new Error('المندوب غير مسجل بالنظام');
+      if (isNaN(data.amount) || data.amount <= 0) {
+        throw new Error('يرجى إدخال مبلغ سلفة صحيح أكبر من الصفر');
+      }
+      if (!data.reason || !data.reason.trim()) {
+        throw new Error('يرجى توضيح سبب طلب السلفة');
+      }
+
+      const newAdvance: AdvanceRequest = {
+        id: `adv_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        repId: data.repId,
+        amount: data.amount,
+        reason: data.reason.trim(),
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+      };
+
+      db.advances.unshift(newAdvance);
+      return newAdvance;
+    });
+  }
+
+  async updateAdvanceStatus(
+    id: string,
+    status: AdvanceStatus,
+    managerNotes?: string
+  ): Promise<AdvanceRequest> {
+    return this.transaction((db) => {
+      if (!db.advances) db.advances = [];
+      const idx = db.advances.findIndex((a) => a.id === id);
+      if (idx === -1) throw new Error('طلب السلفة غير موجود');
+
+      db.advances[idx] = {
+        ...db.advances[idx],
+        status,
+        managerNotes: managerNotes !== undefined ? managerNotes.trim() : db.advances[idx].managerNotes,
+        updatedAt: new Date().toISOString(),
+      };
+
+      return db.advances[idx];
+    });
   }
 }
 

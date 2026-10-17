@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { logoutAction, updateAdminPasswordAction } from '@/lib/actions';
@@ -21,6 +21,9 @@ import {
   Lock,
   CheckCircle2,
   AlertCircle,
+  HandCoins,
+  ChevronRight,
+  ChevronLeft,
 } from 'lucide-react';
 
 interface AdminNavProps {
@@ -30,6 +33,7 @@ interface AdminNavProps {
 export default function AdminNav({ userName }: AdminNavProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const navContainerRef = useRef<HTMLDivElement>(null);
 
   // Password Modal State
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -47,6 +51,7 @@ export default function AdminNav({ userName }: AdminNavProps) {
     { href: '/admin/inventory', label: 'المخزون والتشغيلات (FIFO)', icon: Boxes },
     { href: '/admin/dispatch', label: 'تحويل عهدة للسيارات', icon: Truck },
     { href: '/admin/settlements', label: 'تسويات نهاية اليوم', icon: Scale },
+    { href: '/admin/advances', label: 'سلف المناديب', icon: HandCoins },
     { href: '/admin/reps', label: 'إدارة المناديب', icon: Users },
     { href: '/admin/analytics', label: 'التحليلات والمبيعات', icon: BarChart3 },
   ];
@@ -55,6 +60,15 @@ export default function AdminNav({ userName }: AdminNavProps) {
     await logoutAction();
     router.push('/login');
     router.refresh();
+  };
+
+  const scrollNav = (direction: 'left' | 'right') => {
+    if (!navContainerRef.current) return;
+    const distance = 250;
+    navContainerRef.current.scrollBy({
+      left: direction === 'left' ? -distance : distance,
+      behavior: 'smooth',
+    });
   };
 
   const handlePasswordSubmit = async (e: React.FormEvent) => {
@@ -152,28 +166,56 @@ export default function AdminNav({ userName }: AdminNavProps) {
         </div>
       </div>
 
-      {/* Navigation Tabs Bar */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 border-t border-slate-100 overflow-x-auto scrollbar-none">
-        <nav className="flex space-x-1 space-x-reverse min-w-max py-2">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = pathname === item.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition whitespace-nowrap ${
-                  isActive
-                    ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/20'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
-              >
-                <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
-        </nav>
+      {/* Navigation Tabs Bar with Desktop Scroll Arrows */}
+      <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 border-t border-slate-100 flex items-center gap-1.5 relative">
+        {/* Right Arrow (Scroll Right / Forward in RTL) */}
+        <button
+          type="button"
+          onClick={() => scrollNav('right')}
+          title="تحريك التبويبات لليمين"
+          aria-label="تحريك التبويبات لليمين"
+          className="hidden md:flex items-center justify-center w-8 h-8 rounded-xl bg-slate-50 hover:bg-emerald-50 text-slate-500 hover:text-emerald-700 border border-slate-200 hover:border-emerald-200 transition shrink-0 active:scale-90 shadow-2xs"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
+
+        {/* Scrollable Nav Container */}
+        <div
+          ref={navContainerRef}
+          className="flex-1 overflow-x-auto scrollbar-none scroll-smooth py-2"
+        >
+          <nav className="flex space-x-1 space-x-reverse min-w-max">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = pathname === item.href;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition whitespace-nowrap ${
+                    isActive
+                      ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/20'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
+
+        {/* Left Arrow (Scroll Left / Backward in RTL) */}
+        <button
+          type="button"
+          onClick={() => scrollNav('left')}
+          title="تحريك التبويبات لليسار"
+          aria-label="تحريك التبويبات لليسار"
+          className="hidden md:flex items-center justify-center w-8 h-8 rounded-xl bg-slate-50 hover:bg-emerald-50 text-slate-500 hover:text-emerald-700 border border-slate-200 hover:border-emerald-200 transition shrink-0 active:scale-90 shadow-2xs"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
       </div>
 
       {/* Modal: Change Admin Password */}

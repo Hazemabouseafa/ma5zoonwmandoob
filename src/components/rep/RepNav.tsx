@@ -8,6 +8,7 @@ import {
   RotateCcw,
   Wallet,
   ClipboardList,
+  HandCoins,
 } from 'lucide-react';
 
 export default function RepNav() {
@@ -18,6 +19,7 @@ export default function RepNav() {
     { href: '/rep/new-invoice', label: 'فاتورة جديدة', icon: PlusCircle, isPrimary: true },
     { href: '/rep/returns', label: 'المرتجعات', icon: RotateCcw },
     { href: '/rep/collections', label: 'التحصيلات', icon: Wallet },
+    { href: '/rep/advances', label: 'السلف', icon: HandCoins },
     { href: '/rep/summary', label: 'يوميتي', icon: ClipboardList },
   ];
 

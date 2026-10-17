@@ -129,6 +129,19 @@ export interface Settlement {
   createdAt: string;
 }
 
+export type AdvanceStatus = 'pending' | 'approved' | 'rejected';
+
+export interface AdvanceRequest {
+  id: string;
+  repId: string;
+  amount: number;
+  reason: string;
+  status: AdvanceStatus;
+  managerNotes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 // Session User type for JWT & client auth
 export interface SessionUser {
   id: string;

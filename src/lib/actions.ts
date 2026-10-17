@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { dbStore, calculateExpiry } from './store';
 import { signToken, setAuthCookie, clearAuthCookie, getCurrentUser } from './auth';
+import { AdvanceStatus } from '@/types';
 
 export async function loginAction(formData: FormData) {
   const username = formData.get('username') as string;
@@ -539,5 +540,76 @@ export async function saveSettlementAction(data: {
     return { success: true, settlement };
   } catch (err: any) {
     return { success: false, error: err.message };
+  }
+}
+
+// ----------------------------------------------------
+// REP & ADMIN: Cash Advances (سلف المناديب)
+// ----------------------------------------------------
+export async function createAdvanceRequestAction(formData: FormData) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return { success: false, error: 'يرجى تسجيل الدخول أولاً' };
+    }
+
+    const amount = parseFloat(formData.get('amount') as string);
+    const reason = ((formData.get('reason') as string) || '').trim();
+
+    if (isNaN(amount) || amount <= 0) {
+      return { success: false, error: 'يرجى إدخال مبلغ سلفة صحيح أكبر من الصفر' };
+    }
+
+    if (!reason) {
+      return { success: false, error: 'يرجى كتابة سبب طلب السلفة' };
+    }
+
+    const advance = await dbStore.createAdvanceRequest({
+      repId: user.id,
+      amount,
+      reason,
+    });
+
+    revalidatePath('/rep/advances');
+    revalidatePath('/rep');
+    revalidatePath('/admin/advances');
+    revalidatePath('/admin');
+
+    return {
+      success: true,
+      message: 'تم إرسال طلب السلفة إلى الإدارة بنجاح، بانتظار المراجعة والاعتماد',
+      advance,
+    };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'فشل إرسال طلب السلفة' };
+  }
+}
+
+export async function updateAdvanceStatusAction(
+  id: string,
+  status: AdvanceStatus,
+  managerNotes?: string
+) {
+  try {
+    const user = await getCurrentUser();
+    if (!user || user.role !== 'admin') {
+      return { success: false, error: 'غير مصرح لك بإجراء هذه العملية' };
+    }
+
+    const updated = await dbStore.updateAdvanceStatus(id, status, managerNotes);
+
+    revalidatePath('/admin/advances');
+    revalidatePath('/admin');
+    revalidatePath('/rep/advances');
+    revalidatePath('/rep');
+
+    const statusText = status === 'approved' ? 'الموافقة على السلفة' : status === 'rejected' ? 'رفض السلفة' : 'تحديث الطلب';
+    return {
+      success: true,
+      message: `تم ${statusText} بنجاح`,
+      advance: updated,
+    };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'فشل تحديث حالة السلفة' };
   }
 }

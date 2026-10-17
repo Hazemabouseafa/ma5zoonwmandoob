@@ -10,6 +10,7 @@ import {
   Calendar,
   Sparkles,
   ArrowLeft,
+  HandCoins,
 } from 'lucide-react';
 
 export default async function RepVanStockPage() {
@@ -44,6 +45,35 @@ export default async function RepVanStockPage() {
             <span>فاتورة بيع</span>
           </Link>
         </div>
+      </div>
+
+      {/* Quick Action Pills */}
+      <div className="grid grid-cols-2 gap-2">
+        <Link
+          href="/rep/advances"
+          className="p-3 bg-white hover:bg-emerald-50 rounded-2xl border border-slate-200/90 shadow-2xs flex items-center gap-2.5 transition active:scale-98"
+        >
+          <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+            <HandCoins className="w-4 h-4 text-amber-700" />
+          </div>
+          <div className="text-right">
+            <div className="text-xs font-black text-slate-900">طلب سلفة مالية</div>
+            <div className="text-[10px] text-slate-500">تقديم سلفة مؤقتة</div>
+          </div>
+        </Link>
+
+        <Link
+          href="/rep/collections"
+          className="p-3 bg-white hover:bg-emerald-50 rounded-2xl border border-slate-200/90 shadow-2xs flex items-center gap-2.5 transition active:scale-98"
+        >
+          <div className="w-8 h-8 rounded-xl bg-teal-100 text-teal-800 flex items-center justify-center shrink-0">
+            <Clock className="w-4 h-4 text-teal-700" />
+          </div>
+          <div className="text-right">
+            <div className="text-xs font-black text-slate-900">تسجيل تحصيل</div>
+            <div className="text-[10px] text-slate-500">تحصيل مديونية عميل</div>
+          </div>
+        </Link>
       </div>
 
       {/* Van Stock List */}
