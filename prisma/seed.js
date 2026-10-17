@@ -10,14 +10,18 @@ async function main() {
       name: 'محمود عبد الله (المدير العام)',
       role: 'admin',
       isActive: true,
+      phone: '01000000001',
+      assignedRoute: 'المركز الرئيسي - الإدارة العامة',
     },
     create: {
-      id: 'user-admin',
+      id: 'usr_admin',
       name: 'محمود عبد الله (المدير العام)',
       username: 'admin',
       password: '123',
       role: 'admin',
       isActive: true,
+      phone: '01000000001',
+      assignedRoute: 'المركز الرئيسي - الإدارة العامة',
     },
   });
 

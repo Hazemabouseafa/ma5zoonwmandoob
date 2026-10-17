@@ -66,19 +66,19 @@ export async function createRepAction(formData: FormData) {
       return { success: false, error: 'يرجى استكمال جميع الحقول المطلوبة' };
     }
 
-    await dbStore.createUser({
-      name,
-      username,
-      password,
+    const newRep = await dbStore.createUser({
+      name: name.trim(),
+      username: username.trim(),
+      password: password.trim(),
       role: 'rep',
       isActive: true,
-      phone,
-      assignedRoute,
+      phone: phone.trim(),
+      assignedRoute: assignedRoute.trim(),
     });
 
     revalidatePath('/admin/reps');
     revalidatePath('/admin');
-    return { success: true, message: 'تم إضافة المندوب بنجاح' };
+    return { success: true, message: 'تم إضافة المندوب بنجاح', user: newRep };
   } catch (err: any) {
     return { success: false, error: err.message || 'حدث خطأ أثناء إضافة المندوب' };
   }
@@ -88,14 +88,14 @@ export async function toggleRepStatusAction(repId: string, currentStatus: boolea
   try {
     const user = await getCurrentUser();
     if (!user || user.role !== 'admin') {
-      return { success: false, error: 'غير مصرح' };
+      return { success: false, error: 'غير مصرح لك بإجراء هذه العملية' };
     }
 
-    await dbStore.updateUser(repId, { isActive: !currentStatus });
+    const updatedUser = await dbStore.updateUser(repId, { isActive: !currentStatus });
     revalidatePath('/admin/reps');
-    return { success: true };
+    return { success: true, user: updatedUser };
   } catch (err: any) {
-    return { success: false, error: err.message };
+    return { success: false, error: err.message || 'فشل تعديل حالة الحساب' };
   }
 }
 
@@ -103,18 +103,23 @@ export async function resetRepPasswordAction(repId: string, newPass: string) {
   try {
     const user = await getCurrentUser();
     if (!user || user.role !== 'admin') {
-      return { success: false, error: 'غير مصرح' };
+      return { success: false, error: 'غير مصرح لك بإجراء هذه العملية' };
     }
 
-    if (!newPass || newPass.length < 3) {
-      return { success: false, error: 'كلمة المرور يجب أن لا تقل عن 3 أحرف' };
+    if (!newPass || newPass.trim().length < 3) {
+      return { success: false, error: 'كلمة المرور يجب أن لا تقل عن 3 أحرف أو أرقام' };
     }
 
-    await dbStore.updateUser(repId, { password: newPass });
+    const updatedUser = await dbStore.updateUser(repId, { password: newPass.trim() });
     revalidatePath('/admin/reps');
-    return { success: true, message: 'تم تحديث كلمة المرور بنجاح' };
+    revalidatePath('/admin');
+    return {
+      success: true,
+      message: `تم تحديث كلمة المرور للمندوب (${updatedUser.name}) بنجاح`,
+      user: updatedUser,
+    };
   } catch (err: any) {
-    return { success: false, error: err.message };
+    return { success: false, error: err.message || 'فشل تحديث كلمة المرور' };
   }
 }
 
@@ -156,30 +161,34 @@ export async function createBatchAction(formData: FormData) {
   try {
     const user = await getCurrentUser();
     if (!user || user.role !== 'admin') {
-      return { success: false, error: 'غير مصرح' };
+      return { success: false, error: 'غير مصرح لك بإجراء هذه العملية' };
     }
 
-    const productId = formData.get('productId') as string;
-    const batchNumber = formData.get('batchNumber') as string;
+    const productId = ((formData.get('productId') as string) || '').trim();
+    const batchNumber = ((formData.get('batchNumber') as string) || '').trim();
     const quantity = parseInt(formData.get('quantity') as string, 10);
-    const productionDate = formData.get('productionDate') as string || new Date().toISOString();
+    const productionDate = (formData.get('productionDate') as string) || new Date().toISOString();
 
-    if (!productId || isNaN(quantity) || quantity <= 0) {
-      return { success: false, error: 'بيانات التشغيلة غير صالحة' };
+    if (!productId) {
+      return { success: false, error: 'يرجى اختيار الصنف أو المنتج أولاً' };
     }
 
-    await dbStore.createBatch({
+    if (isNaN(quantity) || quantity <= 0) {
+      return { success: false, error: 'يرجى إدخال كمية واردة صحيحة أكبر من الصفر' };
+    }
+
+    const newBatch = await dbStore.createBatch({
       productId,
-      batchNumber,
+      batchNumber: batchNumber || `BAT-${Date.now().toString().slice(-6)}`,
       quantity,
       productionDate,
     });
 
     revalidatePath('/admin/inventory');
     revalidatePath('/admin');
-    return { success: true, message: 'تم تسجيل التشغيلة الجديدة بنجاح بنظام FIFO' };
+    return { success: true, message: `تم تسجيل التشغيلة (${newBatch.batchNumber}) بنجاح بنظام FIFO`, batch: newBatch };
   } catch (err: any) {
-    return { success: false, error: err.message };
+    return { success: false, error: err.message || 'حدث خطأ أثناء تسجيل التشغيلة' };
   }
 }
 
@@ -187,21 +196,25 @@ export async function createProductAction(formData: FormData) {
   try {
     const user = await getCurrentUser();
     if (!user || user.role !== 'admin') {
-      return { success: false, error: 'غير مصرح' };
+      return { success: false, error: 'غير مصرح لك بإجراء هذه العملية' };
     }
 
-    const name = formData.get('name') as string;
+    const name = ((formData.get('name') as string) || '').trim();
     const category = ((formData.get('category') as string) || 'ألبان').trim();
     const shelfLifeDays = parseInt(formData.get('shelfLifeDays') as string, 10) || (category.includes('لبن') || category === 'dairy' ? 1 : 7);
     const price = parseFloat(formData.get('price') as string);
     const cost = parseFloat(formData.get('cost') as string);
-    const unit = (formData.get('unit') as string) || 'كرتونة';
+    const unit = ((formData.get('unit') as string) || 'كرتونة').trim();
 
-    if (!name || isNaN(price) || isNaN(cost)) {
-      return { success: false, error: 'يرجى التحقق من صحة البيانات والأسعار' };
+    if (!name) {
+      return { success: false, error: 'يرجى إدخال اسم الصنف أو المنتج' };
     }
 
-    await dbStore.createProduct({
+    if (isNaN(price) || price < 0 || isNaN(cost) || cost < 0) {
+      return { success: false, error: 'يرجى التحقق من صحة أسعار البيع والتكلفة' };
+    }
+
+    const newProduct = await dbStore.createProduct({
       name,
       category,
       shelfLifeDays,
@@ -211,9 +224,10 @@ export async function createProductAction(formData: FormData) {
     });
 
     revalidatePath('/admin/inventory');
-    return { success: true, message: 'تم إضافة المنتج الجديد بنجاح' };
+    revalidatePath('/admin');
+    return { success: true, message: `تم إضافة الصنف "${newProduct.name}" بنجاح`, product: newProduct };
   } catch (err: any) {
-    return { success: false, error: err.message };
+    return { success: false, error: err.message || 'حدث خطأ أثناء إضافة الصنف' };
   }
 }
 

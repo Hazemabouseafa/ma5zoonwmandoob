@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { User } from '@/types';
 import { createRepAction, toggleRepStatusAction, resetRepPasswordAction } from '@/lib/actions';
@@ -21,13 +21,19 @@ interface Props {
   reps: User[];
 }
 
-export default function RepsClientView({ reps }: Props) {
+export default function RepsClientView({ reps: initialReps }: Props) {
   const router = useRouter();
+  const [repsList, setRepsList] = useState<User[]>(initialReps || []);
   const [showAddModal, setShowAddModal] = useState(false);
   const [resetModalUser, setResetModalUser] = useState<User | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Keep state in sync with parent RSC updates
+  useEffect(() => {
+    setRepsList(initialReps || []);
+  }, [initialReps]);
 
   const handleAddRep = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -39,6 +45,9 @@ export default function RepsClientView({ reps }: Props) {
     setLoading(false);
 
     if (res.success) {
+      if (res.user) {
+        setRepsList((prev) => [res.user, ...prev.filter((r) => r.id !== res.user.id)]);
+      }
       setMsg({ type: 'success', text: res.message || 'تم إضافة المندوب بنجاح' });
       setShowAddModal(false);
       router.refresh();
@@ -48,10 +57,16 @@ export default function RepsClientView({ reps }: Props) {
   };
 
   const handleToggleStatus = async (rep: User) => {
+    setRepsList((prev) =>
+      prev.map((r) => (r.id === rep.id ? { ...r, isActive: !rep.isActive } : r))
+    );
     const res = await toggleRepStatusAction(rep.id, rep.isActive);
-    if (res.success) {
-      router.refresh();
+    if (res.success && res.user) {
+      setRepsList((prev) =>
+        prev.map((r) => (r.id === res.user.id ? res.user : r))
+      );
     }
+    router.refresh();
   };
 
   const handleResetPassword = async (e: React.FormEvent) => {
@@ -61,11 +76,21 @@ export default function RepsClientView({ reps }: Props) {
     setLoading(true);
     setMsg(null);
 
-    const res = await resetRepPasswordAction(resetModalUser.id, newPassword);
+    const targetUserId = resetModalUser.id;
+    const res = await resetRepPasswordAction(targetUserId, newPassword);
     setLoading(false);
 
     if (res.success) {
-      setMsg({ type: 'success', text: res.message || 'تم تحديث كلمة المرور' });
+      if (res.user) {
+        setRepsList((prev) =>
+          prev.map((r) => (r.id === res.user.id ? res.user : r))
+        );
+      } else {
+        setRepsList((prev) =>
+          prev.map((r) => (r.id === targetUserId ? { ...r, password: newPassword } : r))
+        );
+      }
+      setMsg({ type: 'success', text: res.message || 'تم تحديث كلمة المرور بنجاح' });
       setResetModalUser(null);
       setNewPassword('');
       router.refresh();
@@ -79,7 +104,7 @@ export default function RepsClientView({ reps }: Props) {
       {/* Top Action Bar */}
       <div className="flex items-center justify-between">
         <div className="text-sm text-slate-500 font-medium">
-          إجمالي المناديب المسجلين: <strong className="text-slate-900">{reps.length} مناديب</strong>
+          إجمالي المناديب المسجلين: <strong className="text-slate-900">{repsList.length} مناديب</strong>
         </div>
 
         <button
@@ -110,7 +135,7 @@ export default function RepsClientView({ reps }: Props) {
 
       {/* Reps Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {reps.map((rep) => (
+        {repsList.map((rep) => (
           <div
             key={rep.id}
             className={`p-5 rounded-2xl border transition bg-white shadow-xs flex flex-col justify-between ${

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Product, InventoryBatch, Category } from '@/types';
 import {
@@ -31,18 +31,33 @@ interface Props {
 }
 
 export default function InventoryClientView({
-  products,
-  batches,
+  products: initialProducts,
+  batches: initialBatches,
   categories: initialCategories,
 }: Props) {
   const router = useRouter();
-  const [categories, setCategories] = useState<Category[]>(initialCategories);
+  const [productsList, setProductsList] = useState<Product[]>(initialProducts || []);
+  const [batchesList, setBatchesList] = useState(initialBatches || []);
+  const [categories, setCategories] = useState<Category[]>(initialCategories || []);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [showProductModal, setShowProductModal] = useState(false);
   const [showCategoriesModal, setShowCategoriesModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Synchronize state when server props update
+  useEffect(() => {
+    setProductsList(initialProducts || []);
+  }, [initialProducts]);
+
+  useEffect(() => {
+    setBatchesList(initialBatches || []);
+  }, [initialBatches]);
+
+  useEffect(() => {
+    setCategories(initialCategories || []);
+  }, [initialCategories]);
 
   // Category Modal Form State
   const [newCatName, setNewCatName] = useState('');
@@ -60,18 +75,28 @@ export default function InventoryClientView({
   );
 
   // New Batch Form State
-  const [batchProductId, setBatchProductId] = useState(products[0]?.id || '');
+  const [batchProductId, setBatchProductId] = useState(initialProducts[0]?.id || '');
   const [batchNumber, setBatchNumber] = useState('');
   const [batchQuantity, setBatchQuantity] = useState(50);
   const [productionDate, setProductionDate] = useState(new Date().toISOString().slice(0, 16));
 
-  const selectedProduct = products.find((p) => p.id === batchProductId) || products[0];
+  // Automatically keep batchProductId in sync with available products
+  useEffect(() => {
+    if (productsList.length > 0) {
+      if (!batchProductId || !productsList.some((p) => p.id === batchProductId)) {
+        setBatchProductId(productsList[0].id);
+      }
+    }
+  }, [productsList, batchProductId]);
+
+  const selectedProduct =
+    productsList.find((p) => p.id === batchProductId) || productsList[0];
 
   // Calculate projected expiry based on selected product and production date
   const getProjectedExpiry = () => {
     if (!selectedProduct) return '';
     const d = new Date(productionDate);
-    const exp = new Date(d.getTime() + selectedProduct.shelfLifeDays * 24 * 60 * 60 * 1000);
+    const exp = new Date(d.getTime() + (selectedProduct.shelfLifeDays || 1) * 24 * 60 * 60 * 1000);
     return exp.toLocaleString('ar-EG', {
       weekday: 'short',
       year: 'numeric',
@@ -82,7 +107,7 @@ export default function InventoryClientView({
     });
   };
 
-  const filteredBatches = batches.filter((b) => {
+  const filteredBatches = batchesList.filter((b) => {
     if (selectedCategory === 'all') return true;
     return (
       b.product.category === selectedCategory ||
@@ -98,8 +123,15 @@ export default function InventoryClientView({
     setLoading(true);
     setMsg(null);
 
+    const targetProdId = batchProductId || productsList[0]?.id || '';
+    if (!targetProdId) {
+      setMsg({ type: 'error', text: 'يرجى إضافة صنف أولاً في المخزون قبل تسجيل التشغيلة' });
+      setLoading(false);
+      return;
+    }
+
     const formData = new FormData();
-    formData.append('productId', batchProductId);
+    formData.append('productId', targetProdId);
     formData.append('batchNumber', batchNumber || `BAT-${Date.now().toString().slice(-6)}`);
     formData.append('quantity', batchQuantity.toString());
     formData.append('productionDate', new Date(productionDate).toISOString());
@@ -113,7 +145,7 @@ export default function InventoryClientView({
       setBatchNumber('');
       router.refresh();
     } else {
-      setMsg({ type: 'error', text: res.error || 'حدث خطأ' });
+      setMsg({ type: 'error', text: res.error || 'حدث خطأ أثناء تسجيل التشغيلة' });
     }
   };
 
@@ -127,11 +159,15 @@ export default function InventoryClientView({
     setLoading(false);
 
     if (res.success) {
+      if (res.product) {
+        setProductsList((prev) => [...prev, res.product!]);
+        setBatchProductId(res.product.id);
+      }
       setMsg({ type: 'success', text: res.message || 'تم إضافة المنتج بنجاح' });
       setShowProductModal(false);
       router.refresh();
     } else {
-      setMsg({ type: 'error', text: res.error || 'حدث خطأ' });
+      setMsg({ type: 'error', text: res.error || 'حدث خطأ أثناء إضافة الصنف' });
     }
   };
 
@@ -203,7 +239,7 @@ export default function InventoryClientView({
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
             }`}
           >
-            جميع التشغيلات ({batches.length})
+            جميع التشغيلات ({batchesList.length})
           </button>
 
           {categories.map((cat) => {
@@ -212,7 +248,7 @@ export default function InventoryClientView({
               (cat.name === 'ألبان' && selectedCategory === 'dairy') ||
               (cat.name === 'عصائر' && selectedCategory === 'juice');
 
-            const count = batches.filter(
+            const count = batchesList.filter(
               (b) =>
                 b.product.category === cat.name ||
                 (cat.name === 'ألبان' && b.product.category === 'dairy') ||
@@ -429,19 +465,40 @@ export default function InventoryClientView({
             <form onSubmit={handleAddBatch} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  اختر المنتج
+                  اختر الصنف / المنتج
                 </label>
-                <select
-                  value={batchProductId}
-                  onChange={(e) => setBatchProductId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
-                >
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} ({p.category === 'dairy' ? 'ألبان - يوم واحد' : `عصائر - ${p.shelfLifeDays} أيام`})
-                    </option>
-                  ))}
-                </select>
+                {productsList.length === 0 ? (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-center justify-between">
+                    <span>لا يوجد أي أصناف مسجلة حتى الآن. يجب إضافة صنف أولاً.</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowBatchModal(false);
+                        setShowProductModal(true);
+                      }}
+                      className="px-2.5 py-1 bg-amber-700 text-white rounded-lg font-bold hover:bg-amber-800 transition"
+                    >
+                      + إضافة صنف الآن
+                    </button>
+                  </div>
+                ) : (
+                  <select
+                    name="productId"
+                    value={batchProductId || productsList[0]?.id || ''}
+                    onChange={(e) => setBatchProductId(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                  >
+                    {productsList.map((p) => {
+                      const shelfLabel = p.shelfLifeDays === 1 ? 'صلاحية يوم واحد' : `صلاحية ${p.shelfLifeDays} أيام`;
+                      const catLabel = p.category === 'dairy' ? 'ألبان' : p.category === 'juice' ? 'عصائر' : (p.category || 'عام');
+                      return (
+                        <option key={p.id} value={p.id}>
+                          {p.name} ({catLabel} - {shelfLabel})
+                        </option>
+                      );
+                    })}
+                  </select>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -706,7 +763,7 @@ export default function InventoryClientView({
                   </div>
                 ) : (
                   categories.map((c) => {
-                    const count = products.filter(
+                    const count = productsList.filter(
                       (p) =>
                         p.category === c.name ||
                         (c.name === 'ألبان' && p.category === 'dairy') ||

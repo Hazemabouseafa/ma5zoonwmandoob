@@ -5,6 +5,9 @@ interface Props {
   searchParams: Promise<{ repId?: string; batchId?: string }>;
 }
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default async function AdminDispatchPage({ searchParams }: Props) {
   const { repId, batchId } = await searchParams;
   const reps = (await dbStore.getUsers()).filter((u) => u.role === 'rep' && u.isActive);

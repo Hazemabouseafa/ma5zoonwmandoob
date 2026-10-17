@@ -28,7 +28,12 @@ interface DatabaseSchema {
   settlements: Settlement[];
 }
 
-const DB_FILE_PATH = path.join(process.cwd(), 'data', 'al_waseet_db.json');
+function getDbFilePath(): string {
+  if (process.env.VERCEL) {
+    return path.join('/tmp', 'al_waseet_db.json');
+  }
+  return path.join(process.cwd(), 'data', 'al_waseet_db.json');
+}
 
 // Helper to calculate expiry date based on shelf life
 export function calculateExpiry(productionDateStr: string, shelfLifeDays: number): string {
@@ -87,6 +92,7 @@ function getInitialData(): DatabaseSchema {
 class DatabaseStore {
   private data: DatabaseSchema;
   private isLoaded = false;
+  private lastLoadedMtime = 0;
   private writeLock = Promise.resolve();
   private lastModified: number = Date.now();
 
@@ -102,20 +108,45 @@ class DatabaseStore {
     this.lastModified = Date.now();
   }
 
-  private ensureDir() {
-    const dir = path.dirname(DB_FILE_PATH);
+  private ensureDir(targetPath: string) {
+    const dir = path.dirname(targetPath);
     if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+      try {
+        fs.mkdirSync(dir, { recursive: true });
+      } catch (err) {
+        console.error('Error creating directory:', err);
+      }
     }
   }
 
-  private load() {
-    if (this.isLoaded) return;
+  private load(forceReload = false) {
     try {
-      this.ensureDir();
-      if (fs.existsSync(DB_FILE_PATH)) {
-        const raw = fs.readFileSync(DB_FILE_PATH, 'utf-8');
+      const dbPath = getDbFilePath();
+      this.ensureDir(dbPath);
+
+      // On Vercel, copy initial bundled database to /tmp if it doesn't exist yet
+      if (process.env.VERCEL && !fs.existsSync(dbPath)) {
+        const bundledPath = path.join(process.cwd(), 'data', 'al_waseet_db.json');
+        if (fs.existsSync(bundledPath)) {
+          try {
+            fs.copyFileSync(bundledPath, dbPath);
+          } catch (e) {
+            console.error('Failed to copy bundled db to /tmp:', e);
+          }
+        }
+      }
+
+      if (fs.existsSync(dbPath)) {
+        const stats = fs.statSync(dbPath);
+        if (!forceReload && this.isLoaded && stats.mtimeMs <= this.lastLoadedMtime) {
+          return;
+        }
+
+        const raw = fs.readFileSync(dbPath, 'utf-8');
         this.data = JSON.parse(raw);
+        this.lastLoadedMtime = stats.mtimeMs;
+        this.isLoaded = true;
+
         // Seamlessly migrate admin name if it had old name
         const adminUser = this.data.users?.find((u) => u.username === 'admin');
         if (adminUser && adminUser.name.includes('محمد')) {
@@ -134,19 +165,26 @@ class DatabaseStore {
       } else {
         this.data = getInitialData();
         this.persist();
+        this.isLoaded = true;
       }
-      this.isLoaded = true;
     } catch (e) {
       console.error('Failed to load database file, using fallback seeded state:', e);
-      this.data = getInitialData();
-      this.isLoaded = true;
+      if (!this.isLoaded) {
+        this.data = getInitialData();
+        this.isLoaded = true;
+      }
     }
   }
 
   private persist() {
     try {
-      this.ensureDir();
-      fs.writeFileSync(DB_FILE_PATH, JSON.stringify(this.data, null, 2), 'utf-8');
+      const dbPath = getDbFilePath();
+      this.ensureDir(dbPath);
+      fs.writeFileSync(dbPath, JSON.stringify(this.data, null, 2), 'utf-8');
+      try {
+        const stats = fs.statSync(dbPath);
+        this.lastLoadedMtime = stats.mtimeMs;
+      } catch {}
     } catch (e) {
       console.error('Failed to write database file:', e);
     }
@@ -154,7 +192,6 @@ class DatabaseStore {
 
   // Atomic transaction runner: ensures sequential execution preventing race conditions
   public async transaction<T>(fn: (db: DatabaseSchema) => Promise<T> | T): Promise<T> {
-    this.load();
     let result: T;
     let thrownError: any = null;
 
@@ -163,6 +200,8 @@ class DatabaseStore {
       .catch(() => {})
       .then(async () => {
         try {
+          // Always reload freshest data from disk before running transaction
+          this.load(true);
           result = await fn(this.data);
           this.lastModified = Date.now();
           this.persist();
@@ -183,17 +222,27 @@ class DatabaseStore {
   // -------------------------------------------------------------
   async getUsers(): Promise<User[]> {
     this.load();
-    return this.data.users;
+    return this.data.users || [];
   }
 
   async getUserById(id: string): Promise<User | null> {
     this.load();
-    return this.data.users.find((u) => u.id === id) || null;
+    const targetId = String(id).trim();
+    const targetLower = targetId.toLowerCase();
+    return (
+      this.data.users.find(
+        (u) =>
+          u.id === targetId ||
+          u.id.toLowerCase() === targetLower ||
+          u.username.toLowerCase() === targetLower
+      ) || null
+    );
   }
 
   async getUserByUsername(username: string): Promise<User | null> {
     this.load();
-    return this.data.users.find((u) => u.username.toLowerCase() === username.toLowerCase().trim()) || null;
+    const target = username.toLowerCase().trim();
+    return this.data.users.find((u) => u.username.toLowerCase() === target) || null;
   }
 
   async createUser(user: Omit<User, 'id' | 'createdAt'>): Promise<User> {
@@ -215,8 +264,15 @@ class DatabaseStore {
 
   async updateUser(id: string, updates: Partial<User>): Promise<User> {
     return this.transaction((db) => {
-      const idx = db.users.findIndex((u) => u.id === id);
-      if (idx === -1) throw new Error('المستخدم غير موجود');
+      const targetId = String(id).trim();
+      const targetLower = targetId.toLowerCase();
+      const idx = db.users.findIndex(
+        (u) =>
+          u.id === targetId ||
+          u.id.toLowerCase() === targetLower ||
+          u.username.toLowerCase() === targetLower
+      );
+      if (idx === -1) throw new Error('المندوب أو المستخدم غير موجود');
       const updated = { ...db.users[idx], ...updates };
       db.users[idx] = updated;
       return updated;
@@ -281,9 +337,10 @@ class DatabaseStore {
 
   async createProduct(product: Omit<Product, 'id' | 'createdAt'>): Promise<Product> {
     return this.transaction((db) => {
+      if (!db.products) db.products = [];
       const newProd: Product = {
         ...product,
-        id: `prd_${Date.now()}`,
+        id: `prd_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
         createdAt: new Date().toISOString(),
       };
       db.products.push(newProd);
@@ -315,10 +372,17 @@ class DatabaseStore {
     productionDate: string;
   }): Promise<InventoryBatch> {
     return this.transaction((db) => {
-      const prod = db.products.find((p) => p.id === data.productId);
-      if (!prod) throw new Error('المنتج المحدد غير موجود');
+      const targetProdId = String(data.productId).trim();
+      const prod = db.products.find(
+        (p) =>
+          p.id === targetProdId ||
+          p.id.toLowerCase() === targetProdId.toLowerCase() ||
+          p.name === targetProdId
+      );
+      if (!prod) throw new Error('المنتج المحدد غير موجود، يرجى إعادة المحاولة');
 
-      const expiryDate = calculateExpiry(data.productionDate, prod.shelfLifeDays);
+      const shelfDays = prod.shelfLifeDays || 1;
+      const expiryDate = calculateExpiry(data.productionDate, shelfDays);
       const status = determineBatchStatus(expiryDate, data.quantity);
 
       const newBatch: InventoryBatch = {

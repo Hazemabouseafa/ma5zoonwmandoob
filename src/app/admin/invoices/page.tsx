@@ -1,6 +1,9 @@
 import { dbStore } from '@/lib/store';
 import InvoicesClientView from '@/components/admin/InvoicesClientView';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default async function AdminInvoicesPage() {
   const invoices = await dbStore.getInvoices();
   const reps = (await dbStore.getUsers()).filter((u) => u.role === 'rep');

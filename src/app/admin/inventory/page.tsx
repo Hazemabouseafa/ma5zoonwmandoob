@@ -1,6 +1,9 @@
 import { dbStore } from '@/lib/store';
 import InventoryClientView from '@/components/admin/InventoryClientView';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default async function AdminInventoryPage() {
   const products = await dbStore.getProducts();
   const batches = await dbStore.getBatches();

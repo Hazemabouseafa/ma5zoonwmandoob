@@ -15,6 +15,9 @@ import {
   Sparkles,
 } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default async function AdminDashboardPage() {
   const analytics = await dbStore.getAnalytics();
   const recentInvoices = (await dbStore.getInvoices()).slice(0, 5);

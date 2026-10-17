@@ -5,6 +5,9 @@ interface Props {
   searchParams: Promise<{ repId?: string }>;
 }
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default async function AdminSettlementsPage({ searchParams }: Props) {
   const { repId } = await searchParams;
   const reps = (await dbStore.getUsers()).filter((u) => u.role === 'rep');

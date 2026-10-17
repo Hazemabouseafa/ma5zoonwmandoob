@@ -1,6 +1,9 @@
 import { dbStore } from '@/lib/store';
 import ClientsClientView from '@/components/admin/ClientsClientView';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default async function AdminClientsPage() {
   const clients = await dbStore.getClients();
 
