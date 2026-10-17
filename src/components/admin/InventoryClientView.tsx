@@ -2,8 +2,13 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Product, InventoryBatch } from '@/types';
-import { createBatchAction, createProductAction } from '@/lib/actions';
+import { Product, InventoryBatch, Category } from '@/types';
+import {
+  createBatchAction,
+  createProductAction,
+  createCategoryAction,
+  deleteCategoryAction,
+} from '@/lib/actions';
 import {
   Boxes,
   Plus,
@@ -15,20 +20,44 @@ import {
   X,
   PackagePlus,
   Layers,
+  Tags,
+  Trash2,
 } from 'lucide-react';
 
 interface Props {
   products: Product[];
   batches: (InventoryBatch & { product: Product; hoursRemaining: number })[];
+  categories: Category[];
 }
 
-export default function InventoryClientView({ products, batches }: Props) {
+export default function InventoryClientView({
+  products,
+  batches,
+  categories: initialCategories,
+}: Props) {
   const router = useRouter();
-  const [selectedCategory, setSelectedCategory] = useState<'all' | 'dairy' | 'juice'>('all');
+  const [categories, setCategories] = useState<Category[]>(initialCategories);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [showProductModal, setShowProductModal] = useState(false);
+  const [showCategoriesModal, setShowCategoriesModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Category Modal Form State
+  const [newCatName, setNewCatName] = useState('');
+  const [newCatShelfLife, setNewCatShelfLife] = useState(1);
+  const [catLoading, setCatLoading] = useState(false);
+  const [catError, setCatError] = useState<string | null>(null);
+  const [catSuccess, setCatSuccess] = useState<string | null>(null);
+
+  // Product Modal State
+  const [productCategory, setProductCategory] = useState<string>(
+    initialCategories[0]?.name || 'ألبان'
+  );
+  const [productShelfLife, setProductShelfLife] = useState<number>(
+    initialCategories[0]?.defaultShelfLifeDays || 1
+  );
 
   // New Batch Form State
   const [batchProductId, setBatchProductId] = useState(products[0]?.id || '');
@@ -55,7 +84,13 @@ export default function InventoryClientView({ products, batches }: Props) {
 
   const filteredBatches = batches.filter((b) => {
     if (selectedCategory === 'all') return true;
-    return b.product.category === selectedCategory;
+    return (
+      b.product.category === selectedCategory ||
+      (selectedCategory === 'ألبان' && b.product.category === 'dairy') ||
+      (selectedCategory === 'عصائر' && b.product.category === 'juice') ||
+      (selectedCategory === 'dairy' && b.product.category === 'ألبان') ||
+      (selectedCategory === 'juice' && b.product.category === 'عصائر')
+    );
   });
 
   const handleAddBatch = async (e: React.FormEvent) => {
@@ -100,15 +135,69 @@ export default function InventoryClientView({ products, batches }: Props) {
     }
   };
 
+  const handleCreateCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCatName.trim()) return;
+
+    setCatLoading(true);
+    setCatError(null);
+    setCatSuccess(null);
+
+    const formData = new FormData();
+    formData.append('name', newCatName.trim());
+    formData.append('defaultShelfLifeDays', newCatShelfLife.toString());
+
+    const res = await createCategoryAction(formData);
+    setCatLoading(false);
+
+    if (res.success && res.category) {
+      setCategories((prev) => [...prev, res.category!]);
+      setCatSuccess(res.message || `تم إضافة التصنيف "${newCatName}" بنجاح`);
+      setNewCatName('');
+      setNewCatShelfLife(1);
+      router.refresh();
+    } else {
+      setCatError(res.error || 'فشل إضافة التصنيف');
+    }
+  };
+
+  const handleDeleteCategory = async (catId: string, catName: string) => {
+    if (!confirm(`هل أنت متأكد من حذف تصنيف "${catName}"؟`)) return;
+
+    setCatLoading(true);
+    setCatError(null);
+    setCatSuccess(null);
+
+    const res = await deleteCategoryAction(catId);
+    setCatLoading(false);
+
+    if (res.success) {
+      setCategories((prev) => prev.filter((c) => c.id !== catId));
+      setCatSuccess('تم حذف التصنيف بنجاح');
+      if (selectedCategory === catName) setSelectedCategory('all');
+      router.refresh();
+    } else {
+      setCatError(res.error || 'فشل حذف التصنيف');
+    }
+  };
+
+  const handleCategoryChange = (catName: string) => {
+    setProductCategory(catName);
+    const found = categories.find((c) => c.name === catName);
+    if (found) {
+      setProductShelfLife(found.defaultShelfLifeDays);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Action Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        {/* Category Filter Pills */}
+        {/* Dynamic Category Filter Pills */}
         <div className="flex items-center gap-1.5 p-1 bg-white border border-slate-200 rounded-xl overflow-x-auto shadow-xs">
           <button
             onClick={() => setSelectedCategory('all')}
-            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap ${
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap ${
               selectedCategory === 'all'
                 ? 'bg-slate-900 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -116,30 +205,51 @@ export default function InventoryClientView({ products, batches }: Props) {
           >
             جميع التشغيلات ({batches.length})
           </button>
-          <button
-            onClick={() => setSelectedCategory('dairy')}
-            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap ${
-              selectedCategory === 'dairy'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-            }`}
-          >
-            ألبان طازجة (صلاحية 1 يوم)
-          </button>
-          <button
-            onClick={() => setSelectedCategory('juice')}
-            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap ${
-              selectedCategory === 'juice'
-                ? 'bg-amber-600 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-            }`}
-          >
-            عصائر طبيعية (صلاحية 7-10 أيام)
-          </button>
+
+          {categories.map((cat) => {
+            const isSelected =
+              selectedCategory === cat.name ||
+              (cat.name === 'ألبان' && selectedCategory === 'dairy') ||
+              (cat.name === 'عصائر' && selectedCategory === 'juice');
+
+            const count = batches.filter(
+              (b) =>
+                b.product.category === cat.name ||
+                (cat.name === 'ألبان' && b.product.category === 'dairy') ||
+                (cat.name === 'عصائر' && b.product.category === 'juice')
+            ).length;
+
+            return (
+              <button
+                key={cat.id}
+                onClick={() => setSelectedCategory(cat.name)}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap ${
+                  isSelected
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                {cat.name} ({count})
+              </button>
+            );
+          })}
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+          {/* Manage Categories Button */}
+          <button
+            onClick={() => {
+              setCatError(null);
+              setCatSuccess(null);
+              setShowCategoriesModal(true);
+            }}
+            className="px-3.5 py-2 rounded-xl border border-indigo-200 hover:bg-indigo-50 text-indigo-700 text-xs font-bold transition flex items-center gap-1.5 bg-indigo-50/60 shadow-xs"
+          >
+            <Tags className="w-4 h-4 text-indigo-600" />
+            <span>إدارة التصنيفات ({categories.length})</span>
+          </button>
+
           <button
             onClick={() => setShowProductModal(true)}
             className="px-3.5 py-2 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-bold transition flex items-center gap-1.5 bg-white shadow-xs"
@@ -449,13 +559,27 @@ export default function InventoryClientView({ products, batches }: Props) {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">تصنيف المنتج</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-slate-700">تصنيف المنتج</label>
+                    <button
+                      type="button"
+                      onClick={() => setShowCategoriesModal(true)}
+                      className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800"
+                    >
+                      + تصنيف جديد
+                    </button>
+                  </div>
                   <select
                     name="category"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                    value={productCategory}
+                    onChange={(e) => handleCategoryChange(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 bg-white font-medium"
                   >
-                    <option value="dairy">ألبان طازجة (Dairy)</option>
-                    <option value="juice">عصائر طبيعية (Juice)</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.name}>
+                        {c.name} (صلاحية: {c.defaultShelfLifeDays} يوم)
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -466,9 +590,10 @@ export default function InventoryClientView({ products, batches }: Props) {
                   <input
                     type="number"
                     name="shelfLifeDays"
-                    defaultValue="1"
+                    value={productShelfLife}
+                    onChange={(e) => setProductShelfLife(parseInt(e.target.value, 10) || 1)}
                     min="1"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 font-bold"
                   />
                 </div>
               </div>
@@ -527,6 +652,155 @@ export default function InventoryClientView({ products, batches }: Props) {
                   className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition disabled:opacity-50"
                 >
                   {loading ? 'جاري الحفظ...' : 'حفظ المنتج الجديد'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Manage Categories (إضافة وإلغاء تصنيفات المنتجات) */}
+      {showCategoriesModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center">
+                  <Tags className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">إدارة تصنيفات المنتجات</h3>
+                  <div className="text-[11px] text-slate-500">إضافة أو إلغاء وحذف أسماء التصنيفات</div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCategoriesModal(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {catError && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 flex items-center gap-2 text-xs">
+                <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
+                <span>{catError}</span>
+              </div>
+            )}
+
+            {catSuccess && (
+              <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center gap-2 text-xs font-bold">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                <span>{catSuccess}</span>
+              </div>
+            )}
+
+            {/* Existing Categories List */}
+            <div className="space-y-2">
+              <div className="text-xs font-bold text-slate-700">التصنيفات المسجلة حالياً:</div>
+              <div className="max-h-52 overflow-y-auto space-y-1.5 pr-0.5">
+                {categories.length === 0 ? (
+                  <div className="text-xs text-slate-400 text-center py-4 bg-slate-50 rounded-xl">
+                    لا توجد تصنيفات مسجلة
+                  </div>
+                ) : (
+                  categories.map((c) => {
+                    const count = products.filter(
+                      (p) =>
+                        p.category === c.name ||
+                        (c.name === 'ألبان' && p.category === 'dairy') ||
+                        (c.name === 'عصائر' && p.category === 'juice')
+                    ).length;
+
+                    return (
+                      <div
+                        key={c.id}
+                        className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-slate-100/70 transition"
+                      >
+                        <div>
+                          <div className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                            <span>{c.name}</span>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 font-normal">
+                              صلاحية: {c.defaultShelfLifeDays} يوم
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-500 mt-0.5">
+                            {count} أصناف مرتبطة بهذا التصنيف
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteCategory(c.id, c.name)}
+                          disabled={catLoading}
+                          title="حذف التصنيف"
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition disabled:opacity-50"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* Form to Add New Category */}
+            <form onSubmit={handleCreateCategory} className="pt-3 border-t border-slate-100 space-y-3">
+              <div className="text-xs font-bold text-slate-800">إضافة تصنيف جديد:</div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div className="col-span-2">
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                    اسم التصنيف (مثل: أجبان، زبادي، مياه)
+                  </label>
+                  <input
+                    type="text"
+                    value={newCatName}
+                    onChange={(e) => setNewCatName(e.target.value)}
+                    required
+                    placeholder="اسم التصنيف..."
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                    أيام الصلاحية
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={newCatShelfLife}
+                    onChange={(e) => setNewCatShelfLife(parseInt(e.target.value, 10) || 1)}
+                    required
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 font-bold text-center"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowCategoriesModal(false)}
+                  className="px-3 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100"
+                >
+                  إغلاق
+                </button>
+                <button
+                  type="submit"
+                  disabled={catLoading || !newCatName.trim()}
+                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-98 text-white text-xs font-bold shadow-xs transition flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {catLoading ? (
+                    'جاري الإضافة...'
+                  ) : (
+                    <>
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>إضافة التصنيف</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

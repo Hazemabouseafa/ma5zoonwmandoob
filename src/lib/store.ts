@@ -12,10 +12,12 @@ import {
   Collection,
   Settlement,
   BatchStatus,
+  Category,
 } from '@/types';
 
 interface DatabaseSchema {
   users: User[];
+  categories: Category[];
   products: Product[];
   batches: InventoryBatch[];
   repInventory: RepInventory[];
@@ -62,8 +64,14 @@ function getInitialData(): DatabaseSchema {
     },
   ];
 
+  const categories: Category[] = [
+    { id: 'cat_dairy', name: 'ألبان', defaultShelfLifeDays: 1, createdAt: new Date().toISOString() },
+    { id: 'cat_juice', name: 'عصائر', defaultShelfLifeDays: 7, createdAt: new Date().toISOString() },
+  ];
+
   return {
     users,
+    categories,
     products: [],
     batches: [],
     repInventory: [],
@@ -112,6 +120,15 @@ class DatabaseStore {
         const adminUser = this.data.users?.find((u) => u.username === 'admin');
         if (adminUser && adminUser.name.includes('محمد')) {
           adminUser.name = 'محمود عبد الله (المدير العام)';
+          this.persist();
+        }
+
+        // Initialize categories if missing
+        if (!this.data.categories || !Array.isArray(this.data.categories) || this.data.categories.length === 0) {
+          this.data.categories = [
+            { id: 'cat_dairy', name: 'ألبان', defaultShelfLifeDays: 1, createdAt: new Date().toISOString() },
+            { id: 'cat_juice', name: 'عصائر', defaultShelfLifeDays: 7, createdAt: new Date().toISOString() },
+          ];
           this.persist();
         }
       } else {
@@ -203,6 +220,54 @@ class DatabaseStore {
       const updated = { ...db.users[idx], ...updates };
       db.users[idx] = updated;
       return updated;
+    });
+  }
+
+  // -------------------------------------------------------------
+  // CATEGORIES
+  // -------------------------------------------------------------
+  async getCategories(): Promise<Category[]> {
+    this.load();
+    return this.data.categories || [];
+  }
+
+  async createCategory(name: string, defaultShelfLifeDays: number = 1): Promise<Category> {
+    return this.transaction((db) => {
+      if (!db.categories) db.categories = [];
+      const trimmed = name.trim();
+      if (!trimmed) {
+        throw new Error('يرجى إدخال اسم التصنيف');
+      }
+      const exists = db.categories.some((c) => c.name.toLowerCase() === trimmed.toLowerCase());
+      if (exists) {
+        throw new Error(`التصنيف "${trimmed}" موجود مسبقاً`);
+      }
+      const newCategory: Category = {
+        id: `cat_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        name: trimmed,
+        defaultShelfLifeDays: Math.max(1, defaultShelfLifeDays || 1),
+        createdAt: new Date().toISOString(),
+      };
+      db.categories.push(newCategory);
+      return newCategory;
+    });
+  }
+
+  async deleteCategory(id: string): Promise<void> {
+    return this.transaction((db) => {
+      if (!db.categories) db.categories = [];
+      const cat = db.categories.find((c) => c.id === id || c.name === id);
+      if (!cat) {
+        throw new Error('التصنيف المراد حذفه غير موجود');
+      }
+      // Check if any product is currently using this category
+      const inUse = db.products.some(
+        (p) => p.category === cat.name || p.category === cat.id
+      );
+      if (inUse) {
+        throw new Error(`لا يمكن حذف التصنيف "${cat.name}" لأنه مرتبط بأصناف حالية. يرجى تعديل أو حذف تلك الأصناف أولاً`);
+      }
+      db.categories = db.categories.filter((c) => c.id !== cat.id && c.name !== cat.name);
     });
   }
 
@@ -841,8 +906,9 @@ class DatabaseStore {
         };
       })
       .filter((b) => {
-        if (b.product.category === 'dairy' && b.hoursRemaining <= 24) return true;
-        if (b.product.category === 'juice' && b.hoursRemaining <= 48) return true;
+        const isOneDay = (b.product.shelfLifeDays || 1) <= 1 || b.product.category?.includes('لبن') || b.product.category === 'dairy';
+        if (isOneDay && b.hoursRemaining <= 24) return true;
+        if (!isOneDay && b.hoursRemaining <= 48) return true;
         return false;
       })
       .sort((a, b) => a.hoursRemaining - b.hoursRemaining);

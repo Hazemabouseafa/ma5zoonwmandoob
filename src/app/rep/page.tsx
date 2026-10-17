@@ -67,8 +67,8 @@ export default async function RepVanStockPage() {
           </div>
         ) : (
           vanStock.map((item) => {
-            const isDairy = item.product.category === 'dairy';
-            const isUrgent = item.hoursRemaining <= (isDairy ? 16 : 48);
+            const isShortLived = item.product.shelfLifeDays <= 1 || item.product.category?.includes('لبن') || item.product.category === 'dairy';
+            const isUrgent = item.hoursRemaining <= (isShortLived ? 16 : 48);
             const isExpired = item.hoursRemaining <= 0;
 
             return (
@@ -81,10 +81,10 @@ export default async function RepVanStockPage() {
                     <h3 className="font-bold text-slate-900 text-sm">{item.product.name}</h3>
                     <span
                       className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
-                        isDairy ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'
+                        isShortLived ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'
                       }`}
                     >
-                      {isDairy ? 'ألبان' : 'عصائر'}
+                      {item.product.category === 'dairy' ? 'ألبان' : item.product.category === 'juice' ? 'عصائر' : item.product.category}
                     </span>
                   </div>
 

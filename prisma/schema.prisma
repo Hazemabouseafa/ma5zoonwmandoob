@@ -58,10 +58,19 @@ model User {
   @@map("users")
 }
 
+model Category {
+  id                   String   @id @default(uuid())
+  name                 String   @unique
+  defaultShelfLifeDays Int      @default(1)
+  createdAt            DateTime @default(now())
+
+  @@map("categories")
+}
+
 model Product {
   id             String          @id @default(uuid())
   name           String
-  category       ProductCategory // dairy: 1 day, juice: 7-10 days
+  category       String          @default("ألبان") // Custom category name
   shelfLifeDays  Int             @default(1)
   price          Float
   cost           Float

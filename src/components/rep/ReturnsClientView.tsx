@@ -88,7 +88,7 @@ export default function ReturnsClientView({ products, myReturns }: Props) {
             >
               {products.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name} ({p.category === 'dairy' ? 'ألبان' : 'عصائر'})
+                  {p.name} ({p.category === 'dairy' ? 'ألبان' : p.category === 'juice' ? 'عصائر' : p.category})
                 </option>
               ))}
             </select>

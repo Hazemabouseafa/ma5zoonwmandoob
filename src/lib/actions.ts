@@ -191,8 +191,8 @@ export async function createProductAction(formData: FormData) {
     }
 
     const name = formData.get('name') as string;
-    const category = formData.get('category') as 'dairy' | 'juice';
-    const shelfLifeDays = parseInt(formData.get('shelfLifeDays') as string, 10) || (category === 'dairy' ? 1 : 7);
+    const category = ((formData.get('category') as string) || 'ألبان').trim();
+    const shelfLifeDays = parseInt(formData.get('shelfLifeDays') as string, 10) || (category.includes('لبن') || category === 'dairy' ? 1 : 7);
     const price = parseFloat(formData.get('price') as string);
     const cost = parseFloat(formData.get('cost') as string);
     const unit = (formData.get('unit') as string) || 'كرتونة';
@@ -214,6 +214,47 @@ export async function createProductAction(formData: FormData) {
     return { success: true, message: 'تم إضافة المنتج الجديد بنجاح' };
   } catch (err: any) {
     return { success: false, error: err.message };
+  }
+}
+
+export async function createCategoryAction(formData: FormData) {
+  try {
+    const user = await getCurrentUser();
+    if (!user || user.role !== 'admin') {
+      return { success: false, error: 'غير مصرح لك بإضافة تصنيفات' };
+    }
+
+    const name = (formData.get('name') as string)?.trim();
+    const defaultShelfLifeDays = parseInt(formData.get('defaultShelfLifeDays') as string, 10) || 1;
+
+    if (!name) {
+      return { success: false, error: 'يرجى إدخال اسم التصنيف' };
+    }
+
+    const newCategory = await dbStore.createCategory(name, defaultShelfLifeDays);
+    revalidatePath('/admin/inventory');
+    return { success: true, category: newCategory, message: `تمت إضافة التصنيف "${name}" بنجاح` };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'فشل إضافة التصنيف' };
+  }
+}
+
+export async function deleteCategoryAction(categoryId: string) {
+  try {
+    const user = await getCurrentUser();
+    if (!user || user.role !== 'admin') {
+      return { success: false, error: 'غير مصرح لك بحذف التصنيفات' };
+    }
+
+    if (!categoryId) {
+      return { success: false, error: 'معرّف التصنيف غير محدد' };
+    }
+
+    await dbStore.deleteCategory(categoryId);
+    revalidatePath('/admin/inventory');
+    return { success: true, message: 'تم حذف التصنيف بنجاح' };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'فشل حذف التصنيف' };
   }
 }
 

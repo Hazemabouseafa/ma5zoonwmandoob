@@ -25,7 +25,7 @@ import {
 interface AvailableProduct {
   productId: string;
   name: string;
-  category: 'dairy' | 'juice';
+  category: string;
   price: number;
   unit: string;
   totalAvailable: number;

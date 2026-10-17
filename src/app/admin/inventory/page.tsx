@@ -4,6 +4,7 @@ import InventoryClientView from '@/components/admin/InventoryClientView';
 export default async function AdminInventoryPage() {
   const products = await dbStore.getProducts();
   const batches = await dbStore.getBatches();
+  const categories = await dbStore.getCategories();
 
   return (
     <div className="space-y-6">
@@ -11,12 +12,12 @@ export default async function AdminInventoryPage() {
         <div>
           <h1 className="text-2xl font-black text-slate-900">إدارة المخزون وتشغيلات الوارد (FIFO)</h1>
           <p className="text-sm text-slate-500">
-            تتبع تشغيلات السلع سريعة التلف (الألبان: 1 يوم، العصائر: 7-10 أيام) واحتساب الصلاحية آلياً
+            تتبع تشغيلات السلع سريعة التلف وإدارة التصنيفات واحتساب الصلاحية آلياً
           </p>
         </div>
       </div>
 
-      <InventoryClientView products={products} batches={batches} />
+      <InventoryClientView products={products} batches={batches} categories={categories} />
     </div>
   );
 }

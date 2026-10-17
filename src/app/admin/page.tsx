@@ -157,7 +157,7 @@ export default async function AdminDashboardPage() {
                     </span>
                     <h3 className="font-bold text-slate-900 text-sm mt-1">{batch.product.name}</h3>
                     <div className="text-xs text-slate-500">
-                      تصنيف: {batch.product.category === 'dairy' ? 'ألبان طازجة (1 يوم)' : 'عصائر طبيعية'}
+                      تصنيف: {batch.product.category === 'dairy' ? 'ألبان طازجة (1 يوم)' : batch.product.category === 'juice' ? 'عصائر طبيعية' : `${batch.product.category} (${batch.product.shelfLifeDays} يوم)`}
                     </div>
                   </div>
                   <div

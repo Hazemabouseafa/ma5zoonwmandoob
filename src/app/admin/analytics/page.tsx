@@ -109,9 +109,11 @@ export default async function AdminAnalyticsPage() {
                   </div>
                   <div>
                     <div className="font-bold text-slate-900 text-sm">{item.product.name}</div>
-                    <div className="text-xs text-slate-500">
-                      {item.product.category === 'dairy' ? 'ألبان طازجة' : 'عصائر طبيعية'}
-                    </div>
+                      {item.product.category === 'dairy'
+                        ? 'ألبان طازجة'
+                        : item.product.category === 'juice'
+                        ? 'عصائر طبيعية'
+                        : item.product.category}
                   </div>
                 </div>
 

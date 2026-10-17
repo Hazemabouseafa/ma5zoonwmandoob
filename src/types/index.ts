@@ -1,6 +1,13 @@
 export type Role = 'admin' | 'rep';
 
-export type ProductCategory = 'dairy' | 'juice';
+export type ProductCategory = string;
+
+export interface Category {
+  id: string;
+  name: string;
+  defaultShelfLifeDays: number;
+  createdAt: string;
+}
 
 export type BatchStatus = 'active' | 'expiring_soon' | 'expired' | 'depleted';
 
@@ -25,8 +32,8 @@ export interface User {
 export interface Product {
   id: string;
   name: string;
-  category: ProductCategory;
-  shelfLifeDays: number; // Dairy: 1, Juice: 7-10
+  category: string;
+  shelfLifeDays: number; // Dairy: 1, Juice: 7-10, or custom
   price: number;
   cost: number;
   unit: string;
