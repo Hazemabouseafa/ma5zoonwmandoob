@@ -51,7 +51,7 @@ function getInitialData(): DatabaseSchema {
   const users: User[] = [
     {
       id: 'usr_admin',
-      name: 'محمد عبد الله (المدير العام)',
+      name: 'محمود عبد الله (المدير العام)',
       username: 'admin',
       password: '123',
       role: 'admin',
@@ -80,9 +80,18 @@ class DatabaseStore {
   private data: DatabaseSchema;
   private isLoaded = false;
   private writeLock = Promise.resolve();
+  private lastModified: number = Date.now();
 
   constructor() {
     this.data = getInitialData();
+  }
+
+  public getLastModified(): number {
+    return this.lastModified;
+  }
+
+  public touch(): void {
+    this.lastModified = Date.now();
   }
 
   private ensureDir() {
@@ -99,6 +108,12 @@ class DatabaseStore {
       if (fs.existsSync(DB_FILE_PATH)) {
         const raw = fs.readFileSync(DB_FILE_PATH, 'utf-8');
         this.data = JSON.parse(raw);
+        // Seamlessly migrate admin name if it had old name
+        const adminUser = this.data.users?.find((u) => u.username === 'admin');
+        if (adminUser && adminUser.name.includes('محمد')) {
+          adminUser.name = 'محمود عبد الله (المدير العام)';
+          this.persist();
+        }
       } else {
         this.data = getInitialData();
         this.persist();
@@ -132,6 +147,7 @@ class DatabaseStore {
       .then(async () => {
         try {
           result = await fn(this.data);
+          this.lastModified = Date.now();
           this.persist();
         } catch (err) {
           thrownError = err;

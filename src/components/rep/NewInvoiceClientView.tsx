@@ -150,13 +150,24 @@ export default function NewInvoiceClientView({
 
     const discountLine = inv.discount && inv.discount > 0 ? `🎁 *الخصم الممنوح*: ${inv.discount} ج.م\n` : '';
 
+    const formattedTime = new Date(inv.createdAt).toLocaleTimeString('ar-EG', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+    const formattedDate = new Date(inv.createdAt).toLocaleDateString('ar-EG', {
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+    });
+
     const message = `🧾 *فاتورة مبيعات - المراعي للتوزيع*
 ━━━━━━━━━━━━━━━━━━
-🏢 *تحت إدارة*: أ/ محمد عبد الله
+🏢 *تحت إدارة*: أ/ محمود عبد الله
 🔢 رقم الفاتورة: ${inv.invoiceNumber}
 👤 العميل: ${selectedClient?.name || 'عميل'}
 🚚 المندوب: ${repName}
-📅 التاريخ: ${new Date(inv.createdAt).toLocaleString('ar-EG')}
+📅 التاريخ والوقت: ${formattedDate} الساعة ${formattedTime}
 ━━━━━━━━━━━━━━━━━━
 الأصناف المباعة:
 ${itemsText}
@@ -513,10 +524,13 @@ ${inv.totalAmount - inv.paidAmount > 0 ? `⚠️ *المتبقي آجل*: ${inv.
               <div className="text-center font-bold text-slate-800 pb-2 border-b border-dashed border-slate-300">
                 شركة المراعي للتوزيع والتوريدات
                 <div className="text-[10px] text-emerald-800 font-bold mt-0.5">
-                  تحت إدارة: أ/ محمد عبد الله
+                  تحت إدارة: أ/ محمود عبد الله
                 </div>
                 <div className="text-[10px] text-slate-500 font-normal">
                   المندوب: {repName} | العميل: {selectedClient?.name}
+                </div>
+                <div className="text-[10px] text-slate-600 font-bold mt-1 bg-slate-200/50 py-0.5 px-2 rounded-md inline-block">
+                  التوقيت: {new Date(createdInvoice.createdAt).toLocaleDateString('ar-EG')} - {new Date(createdInvoice.createdAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', hour12: true })}
                 </div>
               </div>
 

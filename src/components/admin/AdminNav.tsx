@@ -1,8 +1,10 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { logoutAction } from '@/lib/actions';
+import { logoutAction, updateAdminPasswordAction } from '@/lib/actions';
+import RealtimeSync from '@/components/common/RealtimeSync';
 import {
   LayoutDashboard,
   Boxes,
@@ -14,6 +16,11 @@ import {
   ShieldCheck,
   FileText,
   Store,
+  KeyRound,
+  X,
+  Lock,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react';
 
 interface AdminNavProps {
@@ -23,6 +30,15 @@ interface AdminNavProps {
 export default function AdminNav({ userName }: AdminNavProps) {
   const pathname = usePathname();
   const router = useRouter();
+
+  // Password Modal State
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passLoading, setPassLoading] = useState(false);
+  const [passError, setPassError] = useState<string | null>(null);
+  const [passSuccess, setPassSuccess] = useState<string | null>(null);
 
   const navItems = [
     { href: '/admin', label: 'الرقابة الحية والمؤشرات', icon: LayoutDashboard },
@@ -41,6 +57,42 @@ export default function AdminNav({ userName }: AdminNavProps) {
     router.refresh();
   };
 
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPassError(null);
+    setPassSuccess(null);
+
+    if (!oldPassword) {
+      setPassError('يرجى إدخال كلمة المرور الحالية');
+      return;
+    }
+    if (newPassword.length < 3) {
+      setPassError('كلمة المرور الجديدة يجب أن لا تقل عن 3 أحرف/أرقام');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPassError('كلمة المرور الجديدة وتأكيدها غير متطابقين');
+      return;
+    }
+
+    setPassLoading(true);
+    const res = await updateAdminPasswordAction(oldPassword, newPassword);
+    setPassLoading(false);
+
+    if (res.success) {
+      setPassSuccess(res.message || 'تم تغيير كلمة المرور بنجاح!');
+      setOldPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setTimeout(() => {
+        setShowPasswordModal(false);
+        setPassSuccess(null);
+      }, 1500);
+    } else {
+      setPassError(res.error || 'فشل تغيير كلمة المرور');
+    }
+  };
+
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-xs">
       {/* Top Bar */}
@@ -53,12 +105,16 @@ export default function AdminNav({ userName }: AdminNavProps) {
             </div>
             <div>
               <div className="font-black text-lg text-slate-800 leading-tight">المراعي للتوزيع</div>
-              <div className="text-[11px] text-emerald-600 font-semibold">تحت إدارة: أ/ محمد عبد الله</div>
+              <div className="text-[11px] text-emerald-600 font-semibold">تحت إدارة: أ/ محمود عبد الله</div>
             </div>
           </div>
 
-          {/* User profile & Logout */}
-          <div className="flex items-center gap-3">
+          {/* User profile, Live Sync, Password Change & Logout */}
+          <div className="flex items-center gap-2.5">
+            {/* Live Sync Status Pill */}
+            <RealtimeSync />
+
+            {/* Profile Pill */}
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-xl border border-slate-200">
               <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center">
                 <ShieldCheck className="w-4 h-4" />
@@ -69,10 +125,25 @@ export default function AdminNav({ userName }: AdminNavProps) {
               </div>
             </div>
 
+            {/* Change Password Button */}
+            <button
+              onClick={() => {
+                setPassError(null);
+                setPassSuccess(null);
+                setShowPasswordModal(true);
+              }}
+              title="تغيير كلمة مرور المدير العام"
+              className="px-2.5 py-1.5 text-slate-700 hover:text-emerald-700 hover:bg-emerald-50 bg-slate-50 border border-slate-200 rounded-xl transition flex items-center gap-1.5 text-xs font-bold shadow-2xs"
+            >
+              <KeyRound className="w-3.5 h-3.5 text-emerald-600" />
+              <span className="hidden md:inline">تغيير الباسوورد</span>
+            </button>
+
+            {/* Logout Button */}
             <button
               onClick={handleLogout}
               title="تسجيل الخروج"
-              className="p-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition flex items-center gap-1.5 text-xs font-semibold"
+              className="p-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition flex items-center gap-1 text-xs font-semibold"
             >
               <LogOut className="w-4 h-4" />
               <span className="hidden sm:inline">خروج</span>
@@ -104,6 +175,125 @@ export default function AdminNav({ userName }: AdminNavProps) {
           })}
         </nav>
       </div>
+
+      {/* Modal: Change Admin Password */}
+      {showPasswordModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-100 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                  <KeyRound className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm">تغيير كلمة مرور المدير العام</h3>
+                  <div className="text-[11px] text-slate-500">حساب أ/ محمود عبد الله</div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPasswordModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {passError && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 flex items-center gap-2 text-xs">
+                <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
+                <span>{passError}</span>
+              </div>
+            )}
+
+            {passSuccess && (
+              <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center gap-2 text-xs font-bold">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                <span>{passSuccess}</span>
+              </div>
+            )}
+
+            <form onSubmit={handlePasswordSubmit} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  كلمة المرور الحالية
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-400 absolute right-3 top-2.5" />
+                  <input
+                    type="password"
+                    value={oldPassword}
+                    onChange={(e) => setOldPassword(e.target.value)}
+                    required
+                    placeholder="أدخل كلمة المرور الحالية"
+                    className="w-full pr-9 pl-3 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  كلمة المرور الجديدة
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-400 absolute right-3 top-2.5" />
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    required
+                    minLength={3}
+                    placeholder="3 أحرف أو أرقام على الأقل"
+                    className="w-full pr-9 pl-3 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  تأكيد كلمة المرور الجديدة
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-400 absolute right-3 top-2.5" />
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                    minLength={3}
+                    placeholder="أعد إدخال كلمة المرور الجديدة"
+                    className="w-full pr-9 pl-3 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowPasswordModal(false)}
+                  className="px-3 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  disabled={passLoading}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white text-xs font-bold shadow-xs transition flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {passLoading ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <KeyRound className="w-3.5 h-3.5" />
+                      <span>حفظ كلمة المرور</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </header>
   );
 }

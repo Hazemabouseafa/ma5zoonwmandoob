@@ -25,7 +25,7 @@ async function runAllTests() {
   console.log('🔹 1. اختبار المصادقة وتوليد وتشفير الجلسات (Authentication & Session)');
   const admin = await dbStore.getUserByUsername('admin');
   assert(admin !== null && admin.role === 'admin', 'التحقق من وجود حساب المدير العام');
-  assert(admin?.name.includes('محمد عبد الله'), 'التحقق من أن المدير العام هو محمد عبد الله');
+  assert(admin?.name.includes('محمود عبد الله'), 'التحقق من أن المدير العام هو محمود عبد الله');
 
   const token = signToken(admin!);
   const decoded = verifyToken(token);

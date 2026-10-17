@@ -118,6 +118,37 @@ export async function resetRepPasswordAction(repId: string, newPass: string) {
   }
 }
 
+export async function updateAdminPasswordAction(oldPass: string, newPass: string) {
+  try {
+    const user = await getCurrentUser();
+    if (!user || user.role !== 'admin') {
+      return { success: false, error: 'غير مصرح لك بتغيير كلمة مرور المدير' };
+    }
+
+    if (!oldPass) {
+      return { success: false, error: 'يرجى إدخال كلمة المرور الحالية' };
+    }
+
+    if (!newPass || newPass.trim().length < 3) {
+      return { success: false, error: 'كلمة المرور الجديدة يجب أن تكون 3 أحرف أو أرقام على الأقل' };
+    }
+
+    const fullUser = await dbStore.getUserById(user.id);
+    if (!fullUser) {
+      return { success: false, error: 'تعذر العثور على حساب المدير' };
+    }
+
+    if (fullUser.password !== oldPass) {
+      return { success: false, error: 'كلمة المرور الحالية غير صحيحة' };
+    }
+
+    await dbStore.updateUser(user.id, { password: newPass.trim() });
+    return { success: true, message: 'تم تغيير كلمة مرور المدير العام بنجاح!' };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'حدث خطأ أثناء تغيير كلمة المرور' };
+  }
+}
+
 // ----------------------------------------------------
 // ADMIN: Inventory & Batches (FIFO)
 // ----------------------------------------------------

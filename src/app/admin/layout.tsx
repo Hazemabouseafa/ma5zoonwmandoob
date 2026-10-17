@@ -24,7 +24,7 @@ export default async function AdminLayout({
         {children}
       </main>
       <footer className="border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-500">
-        المراعي للتوزيع والتوريدات (B2B) • تحت إدارة: أ/ محمد عبد الله • نظام تتبع الصلاحية بنظام FIFO والتسوية اليومية
+        المراعي للتوزيع والتوريدات (B2B) • تحت إدارة: أ/ محمود عبد الله • نظام تتبع الصلاحية بنظام FIFO والتسوية اليومية
       </footer>
     </div>
   );
