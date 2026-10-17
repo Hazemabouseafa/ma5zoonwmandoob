@@ -68,11 +68,19 @@ export default function InventoryClientView({
 
   // Product Modal State
   const [productCategory, setProductCategory] = useState<string>(
-    initialCategories[0]?.name || 'ألبان'
+    initialCategories[0]?.name || ''
   );
   const [productShelfLife, setProductShelfLife] = useState<number>(
     initialCategories[0]?.defaultShelfLifeDays || 1
   );
+
+  // Synchronize productCategory when categories change
+  useEffect(() => {
+    if (categories.length > 0 && (!productCategory || !categories.some((c) => c.name === productCategory))) {
+      setProductCategory(categories[0].name);
+      setProductShelfLife(categories[0].defaultShelfLifeDays || 1);
+    }
+  }, [categories, productCategory]);
 
   // New Batch Form State
   const [batchProductId, setBatchProductId] = useState(initialProducts[0]?.id || '');
@@ -109,13 +117,7 @@ export default function InventoryClientView({
 
   const filteredBatches = batchesList.filter((b) => {
     if (selectedCategory === 'all') return true;
-    return (
-      b.product.category === selectedCategory ||
-      (selectedCategory === 'ألبان' && b.product.category === 'dairy') ||
-      (selectedCategory === 'عصائر' && b.product.category === 'juice') ||
-      (selectedCategory === 'dairy' && b.product.category === 'ألبان') ||
-      (selectedCategory === 'juice' && b.product.category === 'عصائر')
-    );
+    return b.product.category === selectedCategory;
   });
 
   const handleAddBatch = async (e: React.FormEvent) => {
@@ -143,6 +145,7 @@ export default function InventoryClientView({
       setMsg({ type: 'success', text: res.message || 'تم تسجيل التشغيلة بنجاح' });
       setShowBatchModal(false);
       setBatchNumber('');
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event('app:sync'));
       router.refresh();
     } else {
       setMsg({ type: 'error', text: res.error || 'حدث خطأ أثناء تسجيل التشغيلة' });
@@ -165,6 +168,7 @@ export default function InventoryClientView({
       }
       setMsg({ type: 'success', text: res.message || 'تم إضافة المنتج بنجاح' });
       setShowProductModal(false);
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event('app:sync'));
       router.refresh();
     } else {
       setMsg({ type: 'error', text: res.error || 'حدث خطأ أثناء إضافة الصنف' });
@@ -187,10 +191,13 @@ export default function InventoryClientView({
     setCatLoading(false);
 
     if (res.success && res.category) {
-      setCategories((prev) => [...prev, res.category!]);
+      setCategories((prev) => [...prev.filter((c) => c.id !== res.category!.id), res.category!]);
+      setProductCategory(res.category.name);
+      setProductShelfLife(res.category.defaultShelfLifeDays);
       setCatSuccess(res.message || `تم إضافة التصنيف "${newCatName}" بنجاح`);
       setNewCatName('');
       setNewCatShelfLife(1);
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event('app:sync'));
       router.refresh();
     } else {
       setCatError(res.error || 'فشل إضافة التصنيف');
@@ -211,6 +218,7 @@ export default function InventoryClientView({
       setCategories((prev) => prev.filter((c) => c.id !== catId));
       setCatSuccess('تم حذف التصنيف بنجاح');
       if (selectedCategory === catName) setSelectedCategory('all');
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event('app:sync'));
       router.refresh();
     } else {
       setCatError(res.error || 'فشل حذف التصنيف');
@@ -632,12 +640,21 @@ export default function InventoryClientView({
                     onChange={(e) => handleCategoryChange(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 bg-white font-medium"
                   >
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.name}>
-                        {c.name} (صلاحية: {c.defaultShelfLifeDays} يوم)
-                      </option>
-                    ))}
+                    {categories.length === 0 ? (
+                      <option value="">-- اضغط على "+ تصنيف جديد" أولاً --</option>
+                    ) : (
+                      categories.map((c) => (
+                        <option key={c.id} value={c.name}>
+                          {c.name} (صلاحية: {c.defaultShelfLifeDays} يوم)
+                        </option>
+                      ))
+                    )}
                   </select>
+                  {categories.length === 0 && (
+                    <p className="text-[11px] text-amber-700 mt-1 font-medium">
+                      ⚠️ يرجى إضافة تصنيف أولاً عبر الزر أعلاه
+                    </p>
+                  )}
                 </div>
 
                 <div>

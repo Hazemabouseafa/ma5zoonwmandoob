@@ -50,23 +50,31 @@ export default function RealtimeSync() {
       }
     };
 
-    // Smart polling every 6 seconds while active tab is visible
-    timer = setInterval(checkSync, 6000);
+    // Ultra-responsive smart polling every 2 seconds while active tab is visible
+    timer = setInterval(checkSync, 2000);
 
-    // Instant sync when user switches back to this tab
+    // Instant sync when user switches back to this tab or when local action occurs
     const handleVisibilityOrFocus = () => {
       if (document.visibilityState === 'visible') {
         checkSync();
       }
     };
 
+    const handleCustomSync = () => {
+      checkSync();
+    };
+
     window.addEventListener('visibilitychange', handleVisibilityOrFocus);
     window.addEventListener('focus', handleVisibilityOrFocus);
+    window.addEventListener('app:sync', handleCustomSync);
+    window.addEventListener('storage', handleCustomSync);
 
     return () => {
       if (timer) clearInterval(timer);
       window.removeEventListener('visibilitychange', handleVisibilityOrFocus);
       window.removeEventListener('focus', handleVisibilityOrFocus);
+      window.removeEventListener('app:sync', handleCustomSync);
+      window.removeEventListener('storage', handleCustomSync);
     };
   }, [router]);
 

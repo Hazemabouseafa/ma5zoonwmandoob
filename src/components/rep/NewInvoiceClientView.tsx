@@ -121,6 +121,12 @@ export default function NewInvoiceClientView({
 
     if (res.success && res.invoice) {
       setCreatedInvoice(res.invoice);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('app:sync'));
+        try {
+          window.localStorage.setItem('al_waseet_sync', Date.now().toString());
+        } catch {}
+      }
     } else {
       setErrorMsg(res.error || 'حدث خطأ أثناء إصدار الفاتورة');
     }

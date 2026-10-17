@@ -69,14 +69,9 @@ function getInitialData(): DatabaseSchema {
     },
   ];
 
-  const categories: Category[] = [
-    { id: 'cat_dairy', name: 'ألبان', defaultShelfLifeDays: 1, createdAt: new Date().toISOString() },
-    { id: 'cat_juice', name: 'عصائر', defaultShelfLifeDays: 7, createdAt: new Date().toISOString() },
-  ];
-
   return {
     users,
-    categories,
+    categories: [],
     products: [],
     batches: [],
     repInventory: [],
@@ -101,6 +96,13 @@ class DatabaseStore {
   }
 
   public getLastModified(): number {
+    try {
+      const dbPath = getDbFilePath();
+      if (fs.existsSync(dbPath)) {
+        const stats = fs.statSync(dbPath);
+        return Math.max(this.lastModified, stats.mtimeMs);
+      }
+    } catch {}
     return this.lastModified;
   }
 
@@ -154,12 +156,9 @@ class DatabaseStore {
           this.persist();
         }
 
-        // Initialize categories if missing
-        if (!this.data.categories || !Array.isArray(this.data.categories) || this.data.categories.length === 0) {
-          this.data.categories = [
-            { id: 'cat_dairy', name: 'ألبان', defaultShelfLifeDays: 1, createdAt: new Date().toISOString() },
-            { id: 'cat_juice', name: 'عصائر', defaultShelfLifeDays: 7, createdAt: new Date().toISOString() },
-          ];
+        // Ensure categories array exists without re-injecting deleted categories
+        if (!this.data.categories || !Array.isArray(this.data.categories)) {
+          this.data.categories = [];
           this.persist();
         }
       } else {
