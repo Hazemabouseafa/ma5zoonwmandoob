@@ -83,37 +83,57 @@ function getInitialData(): DatabaseSchema {
   };
 }
 
-let prismaClientInstance: any = null;
+const globalForPrisma = globalThis as unknown as {
+  prisma: any | undefined;
+};
 
 function getPrisma(): any {
   if (typeof window !== 'undefined') return null;
   const dbUrl = process.env.DATABASE_URL;
-  if (!dbUrl || dbUrl.includes('dummy') || dbUrl.includes('demo') || !dbUrl.startsWith('postgres')) {
+  if (!dbUrl || dbUrl.includes('ep-dummy') || !dbUrl.startsWith('postgres')) {
     return null;
   }
-  if (!prismaClientInstance) {
+  if (!globalForPrisma.prisma) {
     try {
       const { PrismaClient } = require('@prisma/client');
-      prismaClientInstance = new PrismaClient({
+      globalForPrisma.prisma = new PrismaClient({
         log: ['error'],
       });
     } catch {
-      prismaClientInstance = null;
+      globalForPrisma.prisma = null;
     }
   }
-  return prismaClientInstance;
+  return globalForPrisma.prisma;
 }
 
-// In-Memory & File Store with Atomic Locking
+// In-Memory, Neon Cloud & File Store with Atomic Locking
 class DatabaseStore {
   private data: DatabaseSchema;
   private isLoaded = false;
-  private lastLoadedMtime = 0;
+  private lastRemoteSyncTime = 0;
+  private lastFileMtime = 0;
+  private lastCheckTime = 0;
+  private syncInProgress: Promise<boolean> | null = null;
   private writeLock = Promise.resolve();
   private lastModified: number = Date.now();
 
   constructor() {
     this.data = getInitialData();
+  }
+
+  public async getLatestVersion(): Promise<number> {
+    const prisma = getPrisma();
+    if (prisma) {
+      try {
+        const rows: any = await prisma.$queryRawUnsafe(`
+          SELECT updated_at FROM al_waseet_state WHERE id = 'store_main' LIMIT 1;
+        `);
+        if (rows && rows.length > 0 && rows[0].updated_at) {
+          return Number(rows[0].updated_at);
+        }
+      } catch {}
+    }
+    return this.getLastModified();
   }
 
   public getLastModified(): number {
@@ -142,6 +162,39 @@ class DatabaseStore {
     }
   }
 
+  // Guarantees data is freshly synchronized from Neon PostgreSQL (or local disk fallback)
+  public async ensureLoaded(forceSync = false): Promise<void> {
+    const now = Date.now();
+    // Cache for 1500ms within same process to keep reads microsecond-fast
+    if (!forceSync && this.isLoaded && now - this.lastCheckTime < 1500) {
+      return;
+    }
+
+    if (this.syncInProgress) {
+      await this.syncInProgress;
+      return;
+    }
+
+    this.syncInProgress = (async () => {
+      try {
+        const neonSynced = await this.syncWithNeon();
+        if (!neonSynced) {
+          this.loadFromDisk();
+        }
+        this.lastCheckTime = Date.now();
+        return true;
+      } catch {
+        this.loadFromDisk();
+        this.lastCheckTime = Date.now();
+        return false;
+      } finally {
+        this.syncInProgress = null;
+      }
+    })();
+
+    await this.syncInProgress;
+  }
+
   private async syncWithNeon(): Promise<boolean> {
     const prisma = getPrisma();
     if (!prisma) return false;
@@ -160,16 +213,37 @@ class DatabaseStore {
 
       if (rows && rows.length > 0 && rows[0].data) {
         const remoteTime = Number(rows[0].updated_at || 0);
-        if (remoteTime > this.lastLoadedMtime) {
+        if (remoteTime > this.lastRemoteSyncTime || !this.isLoaded) {
           const raw = typeof rows[0].data === 'string' ? JSON.parse(rows[0].data) : rows[0].data;
+
+          if (!raw.users || !Array.isArray(raw.users) || raw.users.length === 0) {
+            raw.users = getInitialData().users;
+          }
+          const adminUser = raw.users.find((u: any) => u.username === 'admin');
+          if (adminUser && adminUser.name && adminUser.name.includes('محمد')) {
+            adminUser.name = 'محمود عبد الله (المدير العام)';
+          }
+          if (!raw.categories || !Array.isArray(raw.categories)) raw.categories = [];
+          if (!raw.products || !Array.isArray(raw.products)) raw.products = [];
+          if (!raw.batches || !Array.isArray(raw.batches)) raw.batches = [];
+          if (!raw.clients || !Array.isArray(raw.clients)) raw.clients = [];
+          if (!raw.invoices || !Array.isArray(raw.invoices)) raw.invoices = [];
+          if (!raw.returns || !Array.isArray(raw.returns)) raw.returns = [];
+          if (!raw.collections || !Array.isArray(raw.collections)) raw.collections = [];
+          if (!raw.settlements || !Array.isArray(raw.settlements)) raw.settlements = [];
+          if (!raw.repInventory || !Array.isArray(raw.repInventory)) raw.repInventory = [];
+
           this.data = raw;
-          this.lastLoadedMtime = remoteTime;
+          this.lastRemoteSyncTime = remoteTime;
           this.lastModified = remoteTime;
           this.isLoaded = true;
-          this.persist();
+          this.persistToDisk();
         }
         return true;
       } else {
+        if (!this.isLoaded) {
+          this.loadFromDisk();
+        }
         const str = JSON.stringify(this.data);
         const now = Date.now();
         await prisma.$executeRawUnsafe(`
@@ -177,9 +251,13 @@ class DatabaseStore {
           VALUES ('store_main', $1::jsonb, $2)
           ON CONFLICT (id) DO NOTHING;
         `, str, now);
+        this.lastRemoteSyncTime = now;
+        this.lastModified = now;
+        this.isLoaded = true;
         return true;
       }
     } catch (e) {
+      console.error('syncWithNeon error:', e);
       return false;
     }
   }
@@ -195,15 +273,16 @@ class DatabaseStore {
         VALUES ('store_main', $1::jsonb, $2)
         ON CONFLICT (id) DO UPDATE SET data = $1::jsonb, updated_at = $2;
       `, str, now);
-      this.lastLoadedMtime = now;
+      this.lastRemoteSyncTime = now;
       this.lastModified = now;
       return true;
     } catch (e) {
+      console.error('persistToNeon error:', e);
       return false;
     }
   }
 
-  private load(forceReload = false) {
+  private loadFromDisk(forceReload = false) {
     try {
       const dbPath = getDbFilePath();
       this.ensureDir(dbPath);
@@ -222,34 +301,32 @@ class DatabaseStore {
 
       if (fs.existsSync(dbPath)) {
         const stats = fs.statSync(dbPath);
-        if (!forceReload && this.isLoaded && stats.mtimeMs <= this.lastLoadedMtime) {
+        if (!forceReload && this.isLoaded && stats.mtimeMs <= this.lastFileMtime) {
           return;
         }
 
         const raw = fs.readFileSync(dbPath, 'utf-8');
         this.data = JSON.parse(raw);
-        this.lastLoadedMtime = stats.mtimeMs;
+        this.lastFileMtime = stats.mtimeMs;
         this.isLoaded = true;
 
-        // Seamlessly migrate admin name if it had old name
         const adminUser = this.data.users?.find((u) => u.username === 'admin');
-        if (adminUser && adminUser.name.includes('محمد')) {
+        if (adminUser && adminUser.name && adminUser.name.includes('محمد')) {
           adminUser.name = 'محمود عبد الله (المدير العام)';
-          this.persist();
+          this.persistToDisk();
         }
 
-        // Ensure categories array exists without re-injecting deleted categories
         if (!this.data.categories || !Array.isArray(this.data.categories)) {
           this.data.categories = [];
-          this.persist();
+          this.persistToDisk();
         }
       } else {
         this.data = getInitialData();
-        this.persist();
+        this.persistToDisk();
         this.isLoaded = true;
       }
     } catch (e) {
-      console.error('Failed to load database file, using fallback seeded state:', e);
+      console.error('Failed to load database file:', e);
       if (!this.isLoaded) {
         this.data = getInitialData();
         this.isLoaded = true;
@@ -257,14 +334,14 @@ class DatabaseStore {
     }
   }
 
-  private persist() {
+  private persistToDisk() {
     try {
       const dbPath = getDbFilePath();
       this.ensureDir(dbPath);
       fs.writeFileSync(dbPath, JSON.stringify(this.data, null, 2), 'utf-8');
       try {
         const stats = fs.statSync(dbPath);
-        this.lastLoadedMtime = stats.mtimeMs;
+        this.lastFileMtime = stats.mtimeMs;
       } catch {}
     } catch (e) {
       console.error('Failed to write database file:', e);
@@ -276,19 +353,17 @@ class DatabaseStore {
     let result: T;
     let thrownError: any = null;
 
-    // Chain onto the lock, catching any previous error so future transactions proceed
     this.writeLock = this.writeLock
       .catch(() => {})
       .then(async () => {
         try {
-          // 1. Sync with Neon PostgreSQL if connected, otherwise reload from disk
           const neonSynced = await this.syncWithNeon();
           if (!neonSynced) {
-            this.load(true);
+            this.loadFromDisk(true);
           }
           result = await fn(this.data);
           this.lastModified = Date.now();
-          this.persist();
+          this.persistToDisk();
           await this.persistToNeon();
         } catch (err) {
           thrownError = err;
@@ -306,12 +381,12 @@ class DatabaseStore {
   // USERS
   // -------------------------------------------------------------
   async getUsers(): Promise<User[]> {
-    this.load();
+    await this.ensureLoaded();
     return this.data.users || [];
   }
 
   async getUserById(id: string): Promise<User | null> {
-    this.load();
+    await this.ensureLoaded();
     const targetId = String(id).trim();
     const targetLower = targetId.toLowerCase();
     return (
@@ -325,7 +400,7 @@ class DatabaseStore {
   }
 
   async getUserByUsername(username: string): Promise<User | null> {
-    this.load();
+    await this.ensureLoaded();
     const target = username.toLowerCase().trim();
     return this.data.users.find((u) => u.username.toLowerCase() === target) || null;
   }
@@ -368,7 +443,7 @@ class DatabaseStore {
   // CATEGORIES
   // -------------------------------------------------------------
   async getCategories(): Promise<Category[]> {
-    this.load();
+    await this.ensureLoaded();
     return this.data.categories || [];
   }
 
@@ -416,7 +491,7 @@ class DatabaseStore {
   // PRODUCTS & BATCHES (FIFO)
   // -------------------------------------------------------------
   async getProducts(): Promise<Product[]> {
-    this.load();
+    await this.ensureLoaded();
     return this.data.products;
   }
 
@@ -434,7 +509,7 @@ class DatabaseStore {
   }
 
   async getBatches(): Promise<(InventoryBatch & { product: Product; hoursRemaining: number })[]> {
-    this.load();
+    await this.ensureLoaded();
     const now = new Date().getTime();
     return this.data.batches.map((b) => {
       const prod = this.data.products.find((p) => p.id === b.productId)!;
@@ -497,7 +572,7 @@ class DatabaseStore {
       hoursRemaining: number;
     })[]
   > {
-    this.load();
+    await this.ensureLoaded();
     const now = new Date().getTime();
     const items = this.data.repInventory.filter((r) => r.repId === repId && r.quantity > 0);
 
@@ -571,12 +646,12 @@ class DatabaseStore {
   // CLIENTS & OUTLETS (إدارة المنافذ والعملاء)
   // -------------------------------------------------------------
   async getClients(): Promise<Client[]> {
-    this.load();
+    await this.ensureLoaded();
     return this.data.clients;
   }
 
   async getClientById(id: string): Promise<Client | null> {
-    this.load();
+    await this.ensureLoaded();
     return this.data.clients.find((c) => c.id === id) || null;
   }
 
@@ -812,7 +887,7 @@ class DatabaseStore {
       itemsWithProducts: (InvoiceItem & { product: Product })[];
     })[]
   > {
-    this.load();
+    await this.ensureLoaded();
     let list = this.data.invoices;
     const repId = typeof filters === 'string' ? filters : filters?.repId;
     const clientId = typeof filters === 'object' ? filters?.clientId : undefined;
@@ -863,7 +938,7 @@ class DatabaseStore {
       rep: User;
     })[]
   > {
-    this.load();
+    await this.ensureLoaded();
     let list = this.data.collections;
     if (repId) {
       list = list.filter((c) => c.repId === repId);
@@ -881,7 +956,7 @@ class DatabaseStore {
       rep: User;
     })[]
   > {
-    this.load();
+    await this.ensureLoaded();
     let list = this.data.returns;
     if (repId) {
       list = list.filter((r) => r.repId === repId);
@@ -909,7 +984,7 @@ class DatabaseStore {
     }[];
     todayReturns: ReturnItem[];
   }> {
-    this.load();
+    await this.ensureLoaded();
     const rep = this.data.users.find((u) => u.id === repId);
     if (!rep) throw new Error('المندوب غير مسجل');
 
@@ -1008,7 +1083,7 @@ class DatabaseStore {
   }
 
   async getSettlements(): Promise<(Settlement & { rep: User })[]> {
-    this.load();
+    await this.ensureLoaded();
     return this.data.settlements.map((s) => ({
       ...s,
       rep: this.data.users.find((u) => u.id === s.repId) || {
@@ -1027,7 +1102,7 @@ class DatabaseStore {
   // ANALYTICS & DASHBOARD KPIS
   // -------------------------------------------------------------
   async getAnalytics() {
-    this.load();
+    await this.ensureLoaded();
     const todayStr = new Date().toISOString().split('T')[0];
 
     const todayInvoices = this.data.invoices.filter((i) => i.createdAt.startsWith(todayStr));

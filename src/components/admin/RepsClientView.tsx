@@ -50,6 +50,7 @@ export default function RepsClientView({ reps: initialReps }: Props) {
       }
       setMsg({ type: 'success', text: res.message || 'تم إضافة المندوب بنجاح' });
       setShowAddModal(false);
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event('app:sync'));
       router.refresh();
     } else {
       setMsg({ type: 'error', text: res.error || 'حدث خطأ أثناء الإضافة' });
@@ -66,6 +67,7 @@ export default function RepsClientView({ reps: initialReps }: Props) {
         prev.map((r) => (r.id === res.user.id ? res.user : r))
       );
     }
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('app:sync'));
     router.refresh();
   };
 
@@ -93,6 +95,7 @@ export default function RepsClientView({ reps: initialReps }: Props) {
       setMsg({ type: 'success', text: res.message || 'تم تحديث كلمة المرور بنجاح' });
       setResetModalUser(null);
       setNewPassword('');
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event('app:sync'));
       router.refresh();
     } else {
       setMsg({ type: 'error', text: res.error || 'فشل التحديث' });

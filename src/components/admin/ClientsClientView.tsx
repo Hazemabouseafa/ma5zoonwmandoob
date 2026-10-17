@@ -52,6 +52,7 @@ export default function ClientsClientView({ clients }: Props) {
     if (res.success) {
       setMsg({ type: 'success', text: res.message || 'تم إضافة المنفذ بنجاح' });
       setShowAddModal(false);
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event('app:sync'));
       router.refresh();
     } else {
       setMsg({ type: 'error', text: res.error || 'حدث خطأ أثناء الإضافة' });
@@ -72,6 +73,7 @@ export default function ClientsClientView({ clients }: Props) {
     if (res.success) {
       setMsg({ type: 'success', text: res.message || 'تم تحديث البيانات بنجاح' });
       setEditClient(null);
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event('app:sync'));
       router.refresh();
     } else {
       setMsg({ type: 'error', text: res.error || 'فشل التحديث' });
@@ -89,6 +91,7 @@ export default function ClientsClientView({ clients }: Props) {
 
     if (res.success) {
       setMsg({ type: 'success', text: res.message || 'تم حذف المنفذ بنجاح' });
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event('app:sync'));
       router.refresh();
     } else {
       setMsg({ type: 'error', text: res.error || 'فشل الحذف' });

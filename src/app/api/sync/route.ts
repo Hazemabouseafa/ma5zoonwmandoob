@@ -7,7 +7,7 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const since = Number(searchParams.get('since') || 0);
-    const current = dbStore.getLastModified();
+    const current = await dbStore.getLatestVersion();
 
     // If client is already up-to-date, return ultra-lightweight payload (11 bytes!)
     if (since && current <= since) {
