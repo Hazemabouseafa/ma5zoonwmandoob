@@ -231,6 +231,68 @@ export async function createProductAction(formData: FormData) {
   }
 }
 
+export async function createProductAndBatchAction(formData: FormData) {
+  try {
+    const user = await getCurrentUser();
+    if (!user || user.role !== 'admin') {
+      return { success: false, error: 'غير مصرح لك بإجراء هذه العملية' };
+    }
+
+    const productName = ((formData.get('name') as string) || '').trim();
+    const category = ((formData.get('category') as string) || '').trim();
+    const shelfLifeDays = parseInt(formData.get('shelfLifeDays') as string, 10) || 1;
+    const price = parseFloat(formData.get('price') as string) || 0;
+    const cost = parseFloat(formData.get('cost') as string) || 0;
+    const unit = ((formData.get('unit') as string) || 'كرتونة').trim();
+
+    const batchNumber = ((formData.get('batchNumber') as string) || '').trim();
+    const quantity = parseInt(formData.get('quantity') as string, 10);
+    const productionDate = (formData.get('productionDate') as string) || new Date().toISOString();
+
+    if (!productName) {
+      return { success: false, error: 'يرجى كتابة اسم الصنف أو المنتج الوارد' };
+    }
+
+    if (!category) {
+      return { success: false, error: 'يرجى اختيار أو تحديد تصنيف للمنتج' };
+    }
+
+    if (isNaN(quantity) || quantity <= 0) {
+      return { success: false, error: 'يرجى إدخال كمية واردة صحيحة أكبر من الصفر' };
+    }
+
+    // 1. Create product
+    const newProduct = await dbStore.createProduct({
+      name: productName,
+      category,
+      shelfLifeDays,
+      price,
+      cost,
+      unit,
+    });
+
+    // 2. Create batch linked to this product
+    const newBatch = await dbStore.createBatch({
+      productId: newProduct.id,
+      batchNumber: batchNumber || `BAT-${Date.now().toString().slice(-6)}`,
+      quantity,
+      productionDate,
+    });
+
+    revalidatePath('/admin/inventory');
+    revalidatePath('/admin');
+
+    return {
+      success: true,
+      message: `تم تعريف الصنف "${newProduct.name}" وتسجيل تشغيلته (${newBatch.batchNumber}) بنجاح!`,
+      product: newProduct,
+      batch: newBatch,
+    };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'حدث خطأ أثناء حفظ الصنف والتشغيلة' };
+  }
+}
+
 export async function createCategoryAction(formData: FormData) {
   try {
     const user = await getCurrentUser();

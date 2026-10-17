@@ -83,6 +83,27 @@ function getInitialData(): DatabaseSchema {
   };
 }
 
+let prismaClientInstance: any = null;
+
+function getPrisma(): any {
+  if (typeof window !== 'undefined') return null;
+  const dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl || dbUrl.includes('dummy') || dbUrl.includes('demo') || !dbUrl.startsWith('postgres')) {
+    return null;
+  }
+  if (!prismaClientInstance) {
+    try {
+      const { PrismaClient } = require('@prisma/client');
+      prismaClientInstance = new PrismaClient({
+        log: ['error'],
+      });
+    } catch {
+      prismaClientInstance = null;
+    }
+  }
+  return prismaClientInstance;
+}
+
 // In-Memory & File Store with Atomic Locking
 class DatabaseStore {
   private data: DatabaseSchema;
@@ -118,6 +139,67 @@ class DatabaseStore {
       } catch (err) {
         console.error('Error creating directory:', err);
       }
+    }
+  }
+
+  private async syncWithNeon(): Promise<boolean> {
+    const prisma = getPrisma();
+    if (!prisma) return false;
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS al_waseet_state (
+          id VARCHAR(50) PRIMARY KEY,
+          data JSONB NOT NULL,
+          updated_at BIGINT NOT NULL
+        );
+      `);
+
+      const rows: any = await prisma.$queryRawUnsafe(`
+        SELECT data, updated_at FROM al_waseet_state WHERE id = 'store_main' LIMIT 1;
+      `);
+
+      if (rows && rows.length > 0 && rows[0].data) {
+        const remoteTime = Number(rows[0].updated_at || 0);
+        if (remoteTime > this.lastLoadedMtime) {
+          const raw = typeof rows[0].data === 'string' ? JSON.parse(rows[0].data) : rows[0].data;
+          this.data = raw;
+          this.lastLoadedMtime = remoteTime;
+          this.lastModified = remoteTime;
+          this.isLoaded = true;
+          this.persist();
+        }
+        return true;
+      } else {
+        const str = JSON.stringify(this.data);
+        const now = Date.now();
+        await prisma.$executeRawUnsafe(`
+          INSERT INTO al_waseet_state (id, data, updated_at)
+          VALUES ('store_main', $1::jsonb, $2)
+          ON CONFLICT (id) DO NOTHING;
+        `, str, now);
+        return true;
+      }
+    } catch (e) {
+      return false;
+    }
+  }
+
+  private async persistToNeon(): Promise<boolean> {
+    const prisma = getPrisma();
+    if (!prisma) return false;
+    try {
+      const now = Date.now();
+      const str = JSON.stringify(this.data);
+      await prisma.$executeRawUnsafe(`
+        INSERT INTO al_waseet_state (id, data, updated_at)
+        VALUES ('store_main', $1::jsonb, $2)
+        ON CONFLICT (id) DO UPDATE SET data = $1::jsonb, updated_at = $2;
+      `, str, now);
+      this.lastLoadedMtime = now;
+      this.lastModified = now;
+      return true;
+    } catch (e) {
+      return false;
     }
   }
 
@@ -199,11 +281,15 @@ class DatabaseStore {
       .catch(() => {})
       .then(async () => {
         try {
-          // Always reload freshest data from disk before running transaction
-          this.load(true);
+          // 1. Sync with Neon PostgreSQL if connected, otherwise reload from disk
+          const neonSynced = await this.syncWithNeon();
+          if (!neonSynced) {
+            this.load(true);
+          }
           result = await fn(this.data);
           this.lastModified = Date.now();
           this.persist();
+          await this.persistToNeon();
         } catch (err) {
           thrownError = err;
         }

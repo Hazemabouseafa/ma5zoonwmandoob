@@ -8,6 +8,7 @@ import {
   createProductAction,
   createCategoryAction,
   deleteCategoryAction,
+  createProductAndBatchAction,
 } from '@/lib/actions';
 import {
   Boxes,
@@ -82,11 +83,43 @@ export default function InventoryClientView({
     }
   }, [categories, productCategory]);
 
-  // New Batch Form State
+  // Batch Form State & On-the-spot Product Creation
+  const [batchMode, setBatchMode] = useState<'existing' | 'new'>(
+    initialProducts.length === 0 ? 'new' : 'existing'
+  );
   const [batchProductId, setBatchProductId] = useState(initialProducts[0]?.id || '');
   const [batchNumber, setBatchNumber] = useState('');
   const [batchQuantity, setBatchQuantity] = useState(50);
   const [productionDate, setProductionDate] = useState(new Date().toISOString().slice(0, 16));
+
+  // Inline product fields when adding an incoming batch for a brand new product
+  const [newProductName, setNewProductName] = useState('');
+  const [newProductCategory, setNewProductCategory] = useState(
+    initialCategories[0]?.name || ''
+  );
+  const [newProductShelfLife, setNewProductShelfLife] = useState(
+    initialCategories[0]?.defaultShelfLifeDays || 1
+  );
+  const [newProductPrice, setNewProductPrice] = useState(35);
+  const [newProductCost, setNewProductCost] = useState(28);
+  const [newProductUnit, setNewProductUnit] = useState('كرتونة');
+
+  // Auto-switch to 'new' mode if no products exist
+  useEffect(() => {
+    if (productsList.length === 0) {
+      setBatchMode('new');
+    }
+  }, [productsList]);
+
+  // Synchronize category selection for new product in batch modal
+  useEffect(() => {
+    if (categories.length > 0) {
+      if (!newProductCategory || !categories.some((c) => c.name === newProductCategory)) {
+        setNewProductCategory(categories[0].name);
+        setNewProductShelfLife(categories[0].defaultShelfLifeDays || 1);
+      }
+    }
+  }, [categories, newProductCategory]);
 
   // Automatically keep batchProductId in sync with available products
   useEffect(() => {
@@ -100,11 +133,15 @@ export default function InventoryClientView({
   const selectedProduct =
     productsList.find((p) => p.id === batchProductId) || productsList[0];
 
-  // Calculate projected expiry based on selected product and production date
+  // Calculate projected expiry based on mode and production date
   const getProjectedExpiry = () => {
-    if (!selectedProduct) return '';
     const d = new Date(productionDate);
-    const exp = new Date(d.getTime() + (selectedProduct.shelfLifeDays || 1) * 24 * 60 * 60 * 1000);
+    if (isNaN(d.getTime())) return '';
+    const days =
+      batchMode === 'new'
+        ? newProductShelfLife || 1
+        : selectedProduct?.shelfLifeDays || 1;
+    const exp = new Date(d.getTime() + days * 24 * 60 * 60 * 1000);
     return exp.toLocaleString('ar-EG', {
       weekday: 'short',
       year: 'numeric',
@@ -125,30 +162,91 @@ export default function InventoryClientView({
     setLoading(true);
     setMsg(null);
 
-    const targetProdId = batchProductId || productsList[0]?.id || '';
-    if (!targetProdId) {
-      setMsg({ type: 'error', text: 'يرجى إضافة صنف أولاً في المخزون قبل تسجيل التشغيلة' });
+    try {
+      if (batchMode === 'new') {
+        if (!newProductName.trim()) {
+          setMsg({ type: 'error', text: 'يرجى إدخال اسم الصنف أو المنتج الوارد' });
+          setLoading(false);
+          return;
+        }
+
+        const chosenCat = newProductCategory.trim() || (categories[0]?.name || 'عام');
+        const formData = new FormData();
+        formData.append('name', newProductName.trim());
+        formData.append('category', chosenCat);
+        formData.append('shelfLifeDays', (newProductShelfLife || 1).toString());
+        formData.append('price', (newProductPrice || 0).toString());
+        formData.append('cost', (newProductCost || 0).toString());
+        formData.append('unit', newProductUnit.trim() || 'كرتونة');
+        formData.append('batchNumber', batchNumber.trim() || `BAT-${Date.now().toString().slice(-6)}`);
+        formData.append('quantity', (batchQuantity || 1).toString());
+        formData.append('productionDate', new Date(productionDate).toISOString());
+
+        const res = await createProductAndBatchAction(formData);
+        setLoading(false);
+
+        if (res.success && res.product && res.batch) {
+          const newProd = res.product;
+          const newBat = {
+            ...res.batch,
+            product: newProd,
+            hoursRemaining: (newProd.shelfLifeDays || 1) * 24,
+          };
+          setProductsList((prev) => [...prev, newProd]);
+          setBatchesList((prev) => [newBat, ...prev]);
+          setBatchProductId(newProd.id);
+          setNewProductName('');
+          setBatchNumber('');
+          setShowBatchModal(false);
+          setMsg({ type: 'success', text: res.message || 'تم تسجيل الصنف والتشغيلة بنجاح' });
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new Event('app:sync'));
+          }
+          router.refresh();
+        } else {
+          setMsg({ type: 'error', text: res.error || 'فشل تسجيل الصنف والتشغيلة' });
+        }
+      } else {
+        const targetProdId = batchProductId || productsList[0]?.id || '';
+        if (!targetProdId) {
+          setMsg({ type: 'error', text: 'يرجى اختيار صنف أو تسجيل صنف جديد' });
+          setLoading(false);
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append('productId', targetProdId);
+        formData.append('batchNumber', batchNumber.trim() || `BAT-${Date.now().toString().slice(-6)}`);
+        formData.append('quantity', batchQuantity.toString());
+        formData.append('productionDate', new Date(productionDate).toISOString());
+
+        const res = await createBatchAction(formData);
+        setLoading(false);
+
+        if (res.success && res.batch) {
+          const prod = productsList.find((p) => p.id === targetProdId) || selectedProduct;
+          if (prod) {
+            const newBat = {
+              ...res.batch,
+              product: prod,
+              hoursRemaining: (prod.shelfLifeDays || 1) * 24,
+            };
+            setBatchesList((prev) => [newBat, ...prev]);
+          }
+          setMsg({ type: 'success', text: res.message || 'تم تسجيل التشغيلة بنجاح' });
+          setShowBatchModal(false);
+          setBatchNumber('');
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new Event('app:sync'));
+          }
+          router.refresh();
+        } else {
+          setMsg({ type: 'error', text: res.error || 'حدث خطأ أثناء تسجيل التشغيلة' });
+        }
+      }
+    } catch (err: any) {
       setLoading(false);
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append('productId', targetProdId);
-    formData.append('batchNumber', batchNumber || `BAT-${Date.now().toString().slice(-6)}`);
-    formData.append('quantity', batchQuantity.toString());
-    formData.append('productionDate', new Date(productionDate).toISOString());
-
-    const res = await createBatchAction(formData);
-    setLoading(false);
-
-    if (res.success) {
-      setMsg({ type: 'success', text: res.message || 'تم تسجيل التشغيلة بنجاح' });
-      setShowBatchModal(false);
-      setBatchNumber('');
-      if (typeof window !== 'undefined') window.dispatchEvent(new Event('app:sync'));
-      router.refresh();
-    } else {
-      setMsg({ type: 'error', text: res.error || 'حدث خطأ أثناء تسجيل التشغيلة' });
+      setMsg({ type: 'error', text: err.message || 'حدث خطأ غير متوقع' });
     }
   };
 
@@ -451,16 +549,21 @@ export default function InventoryClientView({
 
       {/* Modal: Add New Batch (تسجيل تشغيلة واردة مع احتساب آلي للصلاحية) */}
       {showBatchModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100">
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 my-8">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
                   <Boxes className="w-4 h-4" />
                 </div>
-                <h3 className="font-bold text-slate-900 text-base">
-                  تسجيل تشغيلة واردة جديدة (FIFO Batch)
-                </h3>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">
+                    تسجيل تشغيلة واردة جديدة (FIFO Batch)
+                  </h3>
+                  <div className="text-[11px] text-slate-500">
+                    إدخال البضاعة الواردة وحساب الصلاحية تلقائياً
+                  </div>
+                </div>
               </div>
               <button
                 onClick={() => setShowBatchModal(false)}
@@ -470,35 +573,58 @@ export default function InventoryClientView({
               </button>
             </div>
 
+            {/* Mode Selector Tabs (if products exist) */}
+            {productsList.length > 0 ? (
+              <div className="flex items-center p-1 bg-slate-100 rounded-xl mb-4 text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setBatchMode('existing')}
+                  className={`flex-1 py-2 rounded-lg transition ${
+                    batchMode === 'existing'
+                      ? 'bg-white text-slate-900 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  اختيار صنف مسجل ({productsList.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBatchMode('new')}
+                  className={`flex-1 py-2 rounded-lg transition ${
+                    batchMode === 'new'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  + صنف وارد جديد لأول مرة
+                </button>
+              </div>
+            ) : (
+              <div className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>
+                  أدخل بيانات الصنف الوارد وتفاصيل التشغيلة أدناه وسيتم حفظهما في المخزون مباشرة معاً!
+                </span>
+              </div>
+            )}
+
             <form onSubmit={handleAddBatch} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  اختر الصنف / المنتج
-                </label>
-                {productsList.length === 0 ? (
-                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-center justify-between">
-                    <span>لا يوجد أي أصناف مسجلة حتى الآن. يجب إضافة صنف أولاً.</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowBatchModal(false);
-                        setShowProductModal(true);
-                      }}
-                      className="px-2.5 py-1 bg-amber-700 text-white rounded-lg font-bold hover:bg-amber-800 transition"
-                    >
-                      + إضافة صنف الآن
-                    </button>
-                  </div>
-                ) : (
+              {batchMode === 'existing' && productsList.length > 0 ? (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    اختر الصنف / المنتج المسجل
+                  </label>
                   <select
                     name="productId"
                     value={batchProductId || productsList[0]?.id || ''}
                     onChange={(e) => setBatchProductId(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 bg-white font-medium"
                   >
                     {productsList.map((p) => {
-                      const shelfLabel = p.shelfLifeDays === 1 ? 'صلاحية يوم واحد' : `صلاحية ${p.shelfLifeDays} أيام`;
-                      const catLabel = p.category === 'dairy' ? 'ألبان' : p.category === 'juice' ? 'عصائر' : (p.category || 'عام');
+                      const shelfLabel =
+                        p.shelfLifeDays === 1 ? 'صلاحية يوم واحد' : `صلاحية ${p.shelfLifeDays} أيام`;
+                      const catLabel =
+                        p.category === 'dairy' ? 'ألبان' : p.category === 'juice' ? 'عصائر' : p.category || 'عام';
                       return (
                         <option key={p.id} value={p.id}>
                           {p.name} ({catLabel} - {shelfLabel})
@@ -506,9 +632,135 @@ export default function InventoryClientView({
                       );
                     })}
                   </select>
-                )}
-              </div>
+                </div>
+              ) : (
+                /* On-the-spot Product Fields */
+                <div className="space-y-3 p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
+                  <div className="text-xs font-bold text-slate-800 flex items-center justify-between">
+                    <span>بيانات الصنف الجديد</span>
+                    <span className="text-[10px] text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+                      تسجيل فوري
+                    </span>
+                  </div>
 
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      اسم الصنف أو المنتج *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={newProductName}
+                      onChange={(e) => setNewProductName(e.target.value)}
+                      placeholder="مثلاً: حليب طازج 1 لتر أو عصير برتقال..."
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 bg-white font-medium"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-bold text-slate-700">التصنيف *</label>
+                        <button
+                          type="button"
+                          onClick={() => setShowCategoriesModal(true)}
+                          className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800"
+                        >
+                          + إدارة التصنيفات
+                        </button>
+                      </div>
+                      {categories.length > 0 ? (
+                        <select
+                          value={newProductCategory}
+                          onChange={(e) => {
+                            setNewProductCategory(e.target.value);
+                            const found = categories.find((c) => c.name === e.target.value);
+                            if (found) {
+                              setNewProductShelfLife(found.defaultShelfLifeDays);
+                            }
+                          }}
+                          className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 bg-white font-medium"
+                        >
+                          {categories.map((c) => (
+                            <option key={c.id} value={c.name}>
+                              {c.name} ({c.defaultShelfLifeDays} يوم)
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type="text"
+                          required
+                          value={newProductCategory}
+                          onChange={(e) => setNewProductCategory(e.target.value)}
+                          placeholder="اكتب اسم التصنيف..."
+                          className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 bg-white"
+                        />
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        أيام الصلاحية الافتراضية
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        required
+                        value={newProductShelfLife}
+                        onChange={(e) =>
+                          setNewProductShelfLife(parseInt(e.target.value, 10) || 1)
+                        }
+                        className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 bg-white font-bold"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        سعر البيع (ج.م) *
+                      </label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="0"
+                        required
+                        value={newProductPrice}
+                        onChange={(e) => setNewProductPrice(parseFloat(e.target.value) || 0)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 bg-white font-bold"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        التكلفة (ج.م) *
+                      </label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="0"
+                        required
+                        value={newProductCost}
+                        onChange={(e) => setNewProductCost(parseFloat(e.target.value) || 0)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 bg-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">الوحدة</label>
+                      <input
+                        type="text"
+                        value={newProductUnit}
+                        onChange={(e) => setNewProductUnit(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 bg-white"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Batch Specific Fields */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -518,14 +770,14 @@ export default function InventoryClientView({
                     type="text"
                     value={batchNumber}
                     onChange={(e) => setBatchNumber(e.target.value)}
-                    placeholder="مثلاً: DAIRY-05"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                    placeholder="مثلاً: BAT-001 (اختياري)"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 font-mono"
                   />
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    الكمية الواردة (بالكرتونة)
+                    الكمية الواردة (بالكرتونة) *
                   </label>
                   <input
                     type="number"
@@ -540,7 +792,7 @@ export default function InventoryClientView({
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  تاريخ وتوقيت الإنتاج
+                  تاريخ وتوقيت الإنتاج *
                 </label>
                 <input
                   type="datetime-local"
@@ -560,9 +812,13 @@ export default function InventoryClientView({
                 <div>
                   مدة الصلاحية المبرمجة للمنتج:{' '}
                   <strong>
-                    {selectedProduct?.category === 'dairy'
-                      ? '24 ساعة (ألبان طازجة)'
-                      : `${selectedProduct?.shelfLifeDays} أيام (عصائر)`}
+                    {batchMode === 'new'
+                      ? newProductShelfLife === 1
+                        ? '24 ساعة (يوم واحد)'
+                        : `${newProductShelfLife} أيام`
+                      : selectedProduct?.shelfLifeDays === 1
+                      ? '24 ساعة (يوم واحد)'
+                      : `${selectedProduct?.shelfLifeDays || 1} أيام`}
                   </strong>
                 </div>
                 <div className="pt-1 border-t border-emerald-200 font-bold text-emerald-950">
@@ -583,7 +839,11 @@ export default function InventoryClientView({
                   disabled={loading}
                   className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition disabled:opacity-50"
                 >
-                  {loading ? 'جاري الحفظ...' : 'تأكيد وحفظ التشغيلة'}
+                  {loading
+                    ? 'جاري الحفظ...'
+                    : batchMode === 'new'
+                    ? 'تأكيد وحفظ الصنف والتشغيلة فوراً'
+                    : 'تأكيد وحفظ التشغيلة'}
                 </button>
               </div>
             </form>
