@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AdvanceRequest, User, AdvanceStatus } from '@/types';
-import { updateAdvanceStatusAction } from '@/lib/actions';
+import { updateAdvanceStatusAction, deleteAdvanceAction } from '@/lib/actions';
+import ConfirmDeleteModal from '@/components/admin/ConfirmDeleteModal';
 import {
   HandCoins,
   Clock,
@@ -19,6 +20,7 @@ import {
   Search,
   MessageSquare,
   Sparkles,
+  Trash2,
 } from 'lucide-react';
 
 interface Props {
@@ -44,6 +46,10 @@ export default function AdminAdvancesClientView({
   const [managerNotes, setManagerNotes] = useState('');
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Universal Delete Confirmation Modal State
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const pendingList = advancesList.filter((a) => a.status === 'pending');
   const pendingTotal = pendingList.reduce((sum, a) => sum + a.amount, 0);
@@ -101,6 +107,30 @@ export default function AdminAdvancesClientView({
       router.refresh();
     } else {
       setMsg({ type: 'error', text: res.error || 'فشل تحديث حالة السلفة' });
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    setMsg(null);
+    try {
+      const res = await deleteAdvanceAction(deleteTarget.id);
+      if (res.success) {
+        setAdvancesList((prev) => prev.filter((a) => a.id !== deleteTarget.id));
+        setMsg({ type: 'success', text: res.message || 'تم حذف طلب السلفة بنجاح' });
+      } else {
+        setMsg({ type: 'error', text: res.error || 'فشل حذف طلب السلفة' });
+      }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('app:sync'));
+      }
+      router.refresh();
+    } catch (err: any) {
+      setMsg({ type: 'error', text: err?.message || 'حدث خطأ أثناء الحذف' });
+    } finally {
+      setIsDeleting(false);
+      setDeleteTarget(null);
     }
   };
 
@@ -433,6 +463,20 @@ export default function AdminAdvancesClientView({
                         {isApproved ? 'تعديل الحالة إلى مرفوض' : 'تعديل الحالة إلى معتمد'}
                       </button>
                     )}
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setDeleteTarget({
+                          id: adv.id,
+                          name: `طلب سلفة للمندوب: ${adv.rep?.name || 'مندوب'} بمبلغ: ${adv.amount.toLocaleString('ar-EG')} ج.م (${adv.reason})`,
+                        })
+                      }
+                      title="حذف طلب السلفة"
+                      className="p-1.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
               </div>
@@ -547,6 +591,17 @@ export default function AdminAdvancesClientView({
           </div>
         </div>
       )}
+
+      {/* Universal Delete Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={deleteTarget !== null}
+        itemName={deleteTarget?.name}
+        isLoading={isDeleting}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => {
+          if (!isDeleting) setDeleteTarget(null);
+        }}
+      />
     </div>
   );
 }

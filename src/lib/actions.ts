@@ -993,4 +993,145 @@ export async function setRepTargetAction(formData: FormData) {
   }
 }
 
+// -------------------------------------------------------------
+// UNIVERSAL ADMIN DELETE ACTIONS (خاصية الحذف الشامل للمدير)
+// -------------------------------------------------------------
+
+export async function deleteProductAction(productId: string) {
+  try {
+    const user = await getCurrentUser();
+    if (!user || user.role !== 'admin') {
+      return { success: false, error: 'غير مصرح لك بإجراء هذه العملية' };
+    }
+
+    await dbStore.deleteProduct(productId);
+
+    revalidatePath('/admin/inventory');
+    revalidatePath('/admin/profit-loss');
+    revalidatePath('/admin');
+
+    return { success: true, message: 'تم حذف الصنف وتشغيلاته بنجاح' };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'فشل حذف الصنف' };
+  }
+}
+
+export async function deleteBatchAction(batchId: string) {
+  try {
+    const user = await getCurrentUser();
+    if (!user || user.role !== 'admin') {
+      return { success: false, error: 'غير مصرح لك بإجراء هذه العملية' };
+    }
+
+    await dbStore.deleteBatch(batchId);
+
+    revalidatePath('/admin/inventory');
+    revalidatePath('/admin/profit-loss');
+    revalidatePath('/admin');
+
+    return { success: true, message: 'تم حذف التشغيلة من المخزن بنجاح' };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'فشل حذف التشغيلة' };
+  }
+}
+
+export async function deleteSupplierAction(supplierId: string) {
+  try {
+    const user = await getCurrentUser();
+    if (!user || user.role !== 'admin') {
+      return { success: false, error: 'غير مصرح لك بإجراء هذه العملية' };
+    }
+
+    await dbStore.deleteSupplier(supplierId);
+
+    revalidatePath('/admin/suppliers');
+    revalidatePath('/admin/inventory');
+    revalidatePath('/admin/profit-loss');
+    revalidatePath('/admin');
+
+    return { success: true, message: 'تم حذف المورد بنجاح' };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'فشل حذف المورد' };
+  }
+}
+
+export async function deleteSupplierPurchaseAction(purchaseId: string) {
+  try {
+    const user = await getCurrentUser();
+    if (!user || user.role !== 'admin') {
+      return { success: false, error: 'غير مصرح لك بإجراء هذه العملية' };
+    }
+
+    await dbStore.deleteSupplierPurchase(purchaseId);
+
+    revalidatePath('/admin/suppliers');
+    revalidatePath('/admin/inventory');
+    revalidatePath('/admin/profit-loss');
+    revalidatePath('/admin');
+
+    return { success: true, message: 'تم حذف فاتورة الشراء وتحديث الحسابات بنجاح' };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'فشل حذف فاتورة الشراء' };
+  }
+}
+
+export async function deleteInvoiceAction(invoiceId: string) {
+  try {
+    const user = await getCurrentUser();
+    if (!user || user.role !== 'admin') {
+      return { success: false, error: 'غير مصرح لك بإجراء هذه العملية' };
+    }
+
+    await dbStore.deleteInvoice(invoiceId);
+
+    revalidatePath('/admin/invoices');
+    revalidatePath('/admin/clients');
+    revalidatePath('/admin/profit-loss');
+    revalidatePath('/admin');
+
+    return { success: true, message: 'تم حذف الفاتورة وتحديث الأرصدة بنجاح' };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'فشل حذف الفاتورة' };
+  }
+}
+
+export async function deletePayrollPaymentAction(paymentId: string) {
+  try {
+    const user = await getCurrentUser();
+    if (!user || user.role !== 'admin') {
+      return { success: false, error: 'غير مصرح لك بإجراء هذه العملية' };
+    }
+
+    await dbStore.deletePayrollPayment(paymentId);
+
+    revalidatePath('/admin/employees');
+    revalidatePath('/admin/profit-loss');
+    revalidatePath('/admin');
+
+    return { success: true, message: 'تم حذف دفعة الراتب بنجاح' };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'فشل حذف دفعة الراتب' };
+  }
+}
+
+export async function deleteAdvanceAction(advanceId: string) {
+  try {
+    const user = await getCurrentUser();
+    if (!user || user.role !== 'admin') {
+      return { success: false, error: 'غير مصرح لك بإجراء هذه العملية' };
+    }
+
+    await dbStore.deleteAdvance(advanceId);
+
+    revalidatePath('/admin/advances');
+    revalidatePath('/admin/reps');
+    revalidatePath('/admin/profit-loss');
+    revalidatePath('/admin');
+
+    return { success: true, message: 'تم حذف طلب السلفة بنجاح' };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'فشل حذف طلب السلفة' };
+  }
+}
+
 

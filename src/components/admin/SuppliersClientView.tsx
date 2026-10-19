@@ -8,7 +8,10 @@ import {
   updateSupplierAction,
   recordSupplierPaymentAction,
   createSupplierPurchaseAction,
+  deleteSupplierAction,
+  deleteSupplierPurchaseAction,
 } from '@/lib/actions';
+import ConfirmDeleteModal from '@/components/admin/ConfirmDeleteModal';
 import {
   Building2,
   Plus,
@@ -29,6 +32,7 @@ import {
   Eye,
   Boxes,
   Percent,
+  Trash2,
 } from 'lucide-react';
 
 interface Props {
@@ -65,6 +69,47 @@ export default function SuppliersClientView({
 
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Universal Delete Confirmation Modal State
+  const [deleteTarget, setDeleteTarget] = useState<{
+    type: 'supplier' | 'purchase';
+    id: string;
+    name: string;
+  } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    setMsg(null);
+    try {
+      if (deleteTarget.type === 'supplier') {
+        const res = await deleteSupplierAction(deleteTarget.id);
+        if (res.success) {
+          setSuppliers((prev) => prev.filter((s) => s.id !== deleteTarget.id));
+          setMsg({ type: 'success', text: res.message || 'تم حذف المورد بنجاح' });
+        } else {
+          setMsg({ type: 'error', text: res.error || 'فشل حذف المورد' });
+        }
+      } else {
+        const res = await deleteSupplierPurchaseAction(deleteTarget.id);
+        if (res.success) {
+          setPurchases((prev) => prev.filter((p) => p.id !== deleteTarget.id));
+          if (viewingPurchase?.id === deleteTarget.id) setViewingPurchase(null);
+          setMsg({ type: 'success', text: res.message || 'تم حذف فاتورة الشراء بنجاح' });
+        } else {
+          setMsg({ type: 'error', text: res.error || 'فشل حذف فاتورة الشراء' });
+        }
+      }
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event('app:sync'));
+      router.refresh();
+    } catch (err: any) {
+      setMsg({ type: 'error', text: err?.message || 'حدث خطأ أثناء الحذف' });
+    } finally {
+      setIsDeleting(false);
+      setDeleteTarget(null);
+    }
+  };
 
   // Synchronize state when server props update
   useEffect(() => {
@@ -484,6 +529,20 @@ export default function SuppliersClientView({
                           >
                             تعديل
                           </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDeleteTarget({
+                                type: 'supplier',
+                                id: sup.id,
+                                name: `المورد: ${sup.name}`,
+                              })
+                            }
+                            title="حذف المورد"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -497,35 +556,48 @@ export default function SuppliersClientView({
 
       {/* TAB 2: PURCHASES LIST */}
       {activeTab === 'purchases' && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-          <div className="p-4 bg-slate-50/70 border-b border-slate-200 flex items-center justify-between">
-            <h2 className="text-sm font-bold text-slate-800">
-              سجل فواتير التوريد والشراء الواردة للمخزن الرئيسي
-            </h2>
-            <span className="text-xs text-slate-500 font-medium">
-              عرض {filteredPurchases.length} فاتورة
-            </span>
+        <div className="space-y-4">
+          {/* Step 1 Workflow Banner */}
+          <div className="p-4 bg-blue-50/80 border border-blue-200 rounded-2xl flex items-start gap-3">
+            <Boxes className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+            <div className="text-xs text-blue-900 leading-relaxed">
+              <strong className="block font-bold text-blue-950 mb-0.5">
+                الخطوة 1: تسجيل فواتير الشراء والتوريد من الموردين
+              </strong>
+              عند استلام بضاعة جديدة من المورد، يتم تسجيل الفاتورة هنا لتثبيت الكميات المالية ومديونيات الموردين دون إدخالها تلقائياً للمخزن.
+              لإنشاء تشغيلات المخزون الفعلي بالمستودع بنظام FIFO، توجه إلى صفحة <strong>المخزون والتشغيلات</strong> (الخطوة 2) لربط كل تشغيلة بهذه الفاتورة تلقائياً والتأكد من عدم تجاوز الكمية الواردة.
+            </div>
           </div>
 
-          {filteredPurchases.length === 0 ? (
-            <div className="p-10 text-center text-xs text-slate-500">
-              لا توجد فواتير شراء مسجلة بعد.
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+            <div className="p-4 bg-slate-50/70 border-b border-slate-200 flex items-center justify-between">
+              <h2 className="text-sm font-bold text-slate-800">
+                سجل فواتير التوريد والشراء الواردة للمخزن الرئيسي
+              </h2>
+              <span className="text-xs text-slate-500 font-medium">
+                عرض {filteredPurchases.length} فاتورة
+              </span>
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-right text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 text-slate-500 text-xs bg-slate-50/40">
-                    <th className="py-3 pr-4">رقم الفاتورة</th>
-                    <th className="py-3">المورد</th>
-                    <th className="py-3">عدد الأصناف</th>
-                    <th className="py-3">إجمالي الفاتورة</th>
-                    <th className="py-3">المدفوع / المتبقي</th>
-                    <th className="py-3">طريقة الدفع</th>
-                    <th className="py-3">تاريخ الفاتورة</th>
-                    <th className="py-3 pl-4 text-center">التفاصيل</th>
-                  </tr>
-                </thead>
+
+            {filteredPurchases.length === 0 ? (
+              <div className="p-10 text-center text-xs text-slate-500">
+                لا توجد فواتير شراء مسجلة بعد.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-right text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-slate-500 text-xs bg-slate-50/40">
+                      <th className="py-3 pr-4">رقم الفاتورة</th>
+                      <th className="py-3">المورد</th>
+                      <th className="py-3">عدد الأصناف</th>
+                      <th className="py-3">إجمالي الفاتورة</th>
+                      <th className="py-3">المدفوع / المتبقي</th>
+                      <th className="py-3">طريقة الدفع</th>
+                      <th className="py-3">تاريخ الفاتورة</th>
+                      <th className="py-3 pl-4 text-center">الإجراءات</th>
+                    </tr>
+                  </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredPurchases.map((purchase) => (
                     <tr key={purchase.id} className="hover:bg-slate-50/70 transition">
@@ -566,14 +638,30 @@ export default function SuppliersClientView({
                         {new Date(purchase.createdAt).toLocaleDateString('ar-EG')}
                       </td>
                       <td className="py-3 pl-4 text-center">
-                        <button
-                          type="button"
-                          onClick={() => setViewingPurchase(purchase)}
-                          className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center justify-center gap-1 mx-auto"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          <span>عرض البنود</span>
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setViewingPurchase(purchase)}
+                            className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center gap-1"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>عرض البنود</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDeleteTarget({
+                                type: 'purchase',
+                                id: purchase.id,
+                                name: `فاتورة الشراء رقم: ${purchase.purchaseNumber} (${purchase.supplier?.name || 'مورد'})`,
+                              })
+                            }
+                            title="حذف فاتورة الشراء"
+                            className="p-1.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -582,7 +670,8 @@ export default function SuppliersClientView({
             </div>
           )}
         </div>
-      )}
+      </div>
+    )}
 
       {/* MODAL 1: ADD NEW SUPPLIER */}
       {showAddSupplierModal && (
@@ -1129,7 +1218,22 @@ export default function SuppliersClientView({
               )}
             </div>
 
-            <div className="flex justify-end pt-1">
+            <div className="flex items-center justify-between pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteTarget({
+                    type: 'purchase',
+                    id: viewingPurchase.id,
+                    name: `فاتورة الشراء رقم: ${viewingPurchase.purchaseNumber} (${viewingPurchase.supplier?.name || 'مورد'})`,
+                  });
+                }}
+                className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition flex items-center gap-1.5 border border-rose-200"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>حذف الفاتورة</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => setViewingPurchase(null)}
@@ -1141,6 +1245,17 @@ export default function SuppliersClientView({
           </div>
         </div>
       )}
+
+      {/* Universal Delete Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={deleteTarget !== null}
+        itemName={deleteTarget?.name}
+        isLoading={isDeleting}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => {
+          if (!isDeleting) setDeleteTarget(null);
+        }}
+      />
     </div>
   );
 }

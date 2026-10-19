@@ -710,7 +710,7 @@ class DatabaseStore {
 
       if (qty > remainingQty) {
         throw new Error(
-          `عذراً، الكمية المراد إدخالها للتشغيلة (${qty}) أكبر من الكمية المتبقية في فاتورة المورد المحددة (المتبقي: ${remainingQty})`
+          `عذراً، الكمية المراد إدخالها للتشغيلة (${qty}) أكبر من الكمية الواردة والمتبقية في فاتورة المورد المحددة (المتبقي: ${remainingQty})`
         );
       }
 
@@ -743,6 +743,29 @@ class DatabaseStore {
 
       db.batches.push(newBatch);
       return newBatch;
+    });
+  }
+
+  async deleteProduct(id: string): Promise<boolean> {
+    return this.transaction((db) => {
+      if (!db.products) db.products = [];
+      const prod = db.products.find((p) => p.id === id);
+      if (!prod) throw new Error('المنتج المراد حذفه غير موجود');
+      db.products = db.products.filter((p) => p.id !== id);
+      if (db.batches) {
+        db.batches = db.batches.filter((b) => b.productId !== id);
+      }
+      return true;
+    });
+  }
+
+  async deleteBatch(id: string): Promise<boolean> {
+    return this.transaction((db) => {
+      if (!db.batches) db.batches = [];
+      const batch = db.batches.find((b) => b.id === id);
+      if (!batch) throw new Error('التشغيلة المراد حذفها غير موجودة');
+      db.batches = db.batches.filter((b) => b.id !== id);
+      return true;
     });
   }
 
@@ -1045,6 +1068,28 @@ class DatabaseStore {
 
       db.invoices.unshift(invoice);
       return invoice;
+    });
+  }
+
+  async deleteInvoice(id: string): Promise<boolean> {
+    return this.transaction((db) => {
+      if (!db.invoices) db.invoices = [];
+      const idx = db.invoices.findIndex((inv) => inv.id === id);
+      if (idx === -1) throw new Error('الفاتورة المراد حذفها غير موجودة');
+      const invoice = db.invoices[idx];
+
+      if (invoice.paymentType === 'credit') {
+        const remaining = (invoice.totalAmount || 0) - (invoice.paidAmount || 0);
+        if (remaining > 0 && db.clients) {
+          const client = db.clients.find((c) => c.id === invoice.clientId);
+          if (client) {
+            client.creditBalance = Math.max(0, client.creditBalance - remaining);
+          }
+        }
+      }
+
+      db.invoices.splice(idx, 1);
+      return true;
     });
   }
 
@@ -1519,6 +1564,15 @@ class DatabaseStore {
     });
   }
 
+  async deleteAdvance(id: string): Promise<boolean> {
+    return this.transaction((db) => {
+      if (!db.advances) db.advances = [];
+      const initialCount = db.advances.length;
+      db.advances = db.advances.filter((a) => a.id !== id);
+      return db.advances.length < initialCount;
+    });
+  }
+
   // -------------------------------------------------------------
   // SUPPLIERS & PURCHASES (إدارة الموردين وفواتير الشراء)
   // -------------------------------------------------------------
@@ -1653,7 +1707,7 @@ class DatabaseStore {
 
       let totalAmount = 0;
       const purchaseItems: SupplierPurchaseItem[] = [];
-      const autoReceive = data.autoReceiveBatches !== false;
+      const autoReceive = data.autoReceiveBatches === true;
 
       // Process each item and inject into Central Main Warehouse batches if autoReceive is true
       for (const item of data.items) {
@@ -1748,6 +1802,39 @@ class DatabaseStore {
 
       db.supplierPurchases.unshift(purchase);
       return purchase;
+    });
+  }
+
+  async deleteSupplier(id: string): Promise<boolean> {
+    return this.transaction((db) => {
+      if (!db.suppliers) db.suppliers = [];
+      const supplier = db.suppliers.find((s) => s.id === id);
+      if (!supplier) throw new Error('المورد المراد حذفه غير موجود');
+      db.suppliers = db.suppliers.filter((s) => s.id !== id);
+      return true;
+    });
+  }
+
+  async deleteSupplierPurchase(id: string): Promise<boolean> {
+    return this.transaction((db) => {
+      if (!db.supplierPurchases) db.supplierPurchases = [];
+      const idx = db.supplierPurchases.findIndex((p) => p.id === id);
+      if (idx === -1) throw new Error('فاتورة الشراء المراد حذفها غير موجودة');
+      const purchase = db.supplierPurchases[idx];
+
+      if (purchase.remainingDue > 0 && db.suppliers) {
+        const supp = db.suppliers.find((s) => s.id === purchase.supplierId);
+        if (supp) {
+          supp.totalDue = Math.max(0, (supp.totalDue || 0) - purchase.remainingDue);
+        }
+      }
+
+      if (db.batches) {
+        db.batches = db.batches.filter((b) => b.purchaseId !== id);
+      }
+
+      db.supplierPurchases.splice(idx, 1);
+      return true;
     });
   }
 
@@ -2017,6 +2104,15 @@ class DatabaseStore {
 
       db.payrollPayments.unshift(payment);
       return payment;
+    });
+  }
+
+  async deletePayrollPayment(id: string): Promise<boolean> {
+    return this.transaction((db) => {
+      if (!db.payrollPayments) db.payrollPayments = [];
+      const initialCount = db.payrollPayments.length;
+      db.payrollPayments = db.payrollPayments.filter((p) => p.id !== id);
+      return db.payrollPayments.length < initialCount;
     });
   }
 

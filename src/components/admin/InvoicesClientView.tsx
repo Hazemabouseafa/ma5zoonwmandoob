@@ -1,7 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Invoice, InvoiceItem, Product, Client, User } from '@/types';
+import { deleteInvoiceAction } from '@/lib/actions';
+import ConfirmDeleteModal from '@/components/admin/ConfirmDeleteModal';
 import {
   FileText,
   Search,
@@ -19,6 +22,9 @@ import {
   Layers,
   Sparkles,
   RotateCcw,
+  Trash2,
+  AlertCircle,
+  CheckCircle2,
 } from 'lucide-react';
 
 interface ExtendedInvoice extends Invoice {
@@ -33,14 +39,51 @@ interface Props {
   clients: Client[];
 }
 
-export default function InvoicesClientView({ invoices, reps, clients }: Props) {
+export default function InvoicesClientView({ invoices: initialInvoices, reps, clients }: Props) {
+  const router = useRouter();
+  const [invoicesList, setInvoicesList] = useState<ExtendedInvoice[]>(initialInvoices || []);
   const [selectedRepId, setSelectedRepId] = useState<string>('all');
   const [selectedClientId, setSelectedClientId] = useState<string>('all');
   const [search, setSearch] = useState('');
   const [activeModalInvoice, setActiveModalInvoice] = useState<ExtendedInvoice | null>(null);
 
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  useEffect(() => {
+    setInvoicesList(initialInvoices || []);
+  }, [initialInvoices]);
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    setMsg(null);
+    try {
+      const res = await deleteInvoiceAction(deleteTarget.id);
+      if (res.success) {
+        setInvoicesList((prev) => prev.filter((i) => i.id !== deleteTarget.id));
+        if (activeModalInvoice?.id === deleteTarget.id) {
+          setActiveModalInvoice(null);
+        }
+        setMsg({ type: 'success', text: res.message || 'تم حذف الفاتورة بنجاح' });
+      } else {
+        setMsg({ type: 'error', text: res.error || 'فشل حذف الفاتورة' });
+      }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('app:sync'));
+      }
+      router.refresh();
+    } catch (err: any) {
+      setMsg({ type: 'error', text: err?.message || 'حدث خطأ أثناء الحذف' });
+    } finally {
+      setIsDeleting(false);
+      setDeleteTarget(null);
+    }
+  };
+
   // Filtering
-  const filteredInvoices = invoices.filter((inv) => {
+  const filteredInvoices = invoicesList.filter((inv) => {
     if (selectedRepId !== 'all' && inv.repId !== selectedRepId) return false;
     if (selectedClientId !== 'all' && inv.clientId !== selectedClientId) return false;
     if (search.trim()) {
@@ -160,6 +203,23 @@ export default function InvoicesClientView({ invoices, reps, clients }: Props) {
         </div>
       </div>
 
+      {msg && (
+        <div
+          className={`p-4 rounded-xl text-sm flex items-center gap-2 ${
+            msg.type === 'success'
+              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+              : 'bg-rose-50 text-rose-800 border border-rose-200'
+          }`}
+        >
+          {msg.type === 'success' ? (
+            <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+          ) : (
+            <AlertCircle className="w-5 h-5 text-rose-600" />
+          )}
+          <span>{msg.text}</span>
+        </div>
+      )}
+
       {/* Invoices List Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="p-4 bg-slate-50/70 border-b border-slate-200 flex items-center justify-between">
@@ -276,13 +336,28 @@ export default function InvoicesClientView({ invoices, reps, clients }: Props) {
                       </div>
                     </td>
                     <td className="py-3 pl-4">
-                      <button
-                        type="button"
-                        onClick={() => setActiveModalInvoice(inv)}
-                        className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center gap-1"
-                      >
-                        <span>عرض الأصناف</span>
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setActiveModalInvoice(inv)}
+                          className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center gap-1"
+                        >
+                          <span>عرض الأصناف</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDeleteTarget({
+                              id: inv.id,
+                              name: `فاتورة بيع رقم: ${inv.invoiceNumber} (العميل: ${inv.client.name})`,
+                            })
+                          }
+                          title="حذف الفاتورة"
+                          className="p-1.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -465,26 +540,53 @@ export default function InvoicesClientView({ invoices, reps, clients }: Props) {
               )}
             </div>
 
-            <div className="flex justify-end gap-2 pt-1">
+            <div className="flex items-center justify-between pt-1">
               <button
                 type="button"
-                onClick={() => window.print()}
-                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center gap-1.5"
+                onClick={() => {
+                  setDeleteTarget({
+                    id: activeModalInvoice.id,
+                    name: `فاتورة بيع رقم: ${activeModalInvoice.invoiceNumber} (العميل: ${activeModalInvoice.client.name})`,
+                  });
+                }}
+                className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition flex items-center gap-1.5 border border-rose-200"
               >
-                <Printer className="w-3.5 h-3.5" />
-                <span>طباعة</span>
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>حذف الفاتورة</span>
               </button>
-              <button
-                type="button"
-                onClick={() => setActiveModalInvoice(null)}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold transition"
-              >
-                إغلاق
-              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center gap-1.5"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>طباعة</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveModalInvoice(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold transition"
+                >
+                  إغلاق
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* Universal Delete Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={deleteTarget !== null}
+        itemName={deleteTarget?.name}
+        isLoading={isDeleting}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => {
+          if (!isDeleting) setDeleteTarget(null);
+        }}
+      />
     </div>
   );
 }

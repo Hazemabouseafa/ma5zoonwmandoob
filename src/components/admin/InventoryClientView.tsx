@@ -10,7 +10,10 @@ import {
   createCategoryAction,
   deleteCategoryAction,
   createProductAndBatchAction,
+  deleteBatchAction,
+  deleteProductAction,
 } from '@/lib/actions';
+import ConfirmDeleteModal from '@/components/admin/ConfirmDeleteModal';
 import {
   Boxes,
   Plus,
@@ -21,12 +24,14 @@ import {
   CheckCircle2,
   X,
   PackagePlus,
+  Package,
   Layers,
   Tags,
   Trash2,
   Building2,
   FileCheck,
   ShieldAlert,
+  Search,
 } from 'lucide-react';
 
 export interface AvailablePurchaseItem {
@@ -71,6 +76,50 @@ export default function InventoryClientView({
   const [showCategoriesModal, setShowCategoriesModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Products Directory Modal State
+  const [showProductsModal, setShowProductsModal] = useState(false);
+  const [productSearch, setProductSearch] = useState('');
+
+  // Universal Delete Confirmation Modal State
+  const [deleteTarget, setDeleteTarget] = useState<{
+    type: 'batch' | 'product';
+    id: string;
+    name: string;
+  } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    setMsg(null);
+    try {
+      if (deleteTarget.type === 'batch') {
+        const res = await deleteBatchAction(deleteTarget.id);
+        if (res.success) {
+          setBatchesList((prev) => prev.filter((b) => b.id !== deleteTarget.id));
+          setMsg({ type: 'success', text: res.message || 'تم حذف التشغيلة بنجاح' });
+        } else {
+          setMsg({ type: 'error', text: res.error || 'فشل حذف التشغيلة' });
+        }
+      } else {
+        const res = await deleteProductAction(deleteTarget.id);
+        if (res.success) {
+          setProductsList((prev) => prev.filter((p) => p.id !== deleteTarget.id));
+          setMsg({ type: 'success', text: res.message || 'تم حذف المنتج بنجاح' });
+        } else {
+          setMsg({ type: 'error', text: res.error || 'فشل حذف المنتج' });
+        }
+      }
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event('app:sync'));
+      router.refresh();
+    } catch (err: any) {
+      setMsg({ type: 'error', text: err?.message || 'حدث خطأ أثناء الحذف' });
+    } finally {
+      setIsDeleting(false);
+      setDeleteTarget(null);
+    }
+  };
 
   // Synchronize state when server props update
   useEffect(() => {
@@ -427,6 +476,17 @@ export default function InventoryClientView({
           </button>
 
           <button
+            onClick={() => {
+              setProductSearch('');
+              setShowProductsModal(true);
+            }}
+            className="px-3.5 py-2 rounded-xl border border-emerald-200 hover:bg-emerald-50 text-emerald-800 text-xs font-bold transition flex items-center gap-1.5 bg-emerald-50/60 shadow-xs"
+          >
+            <Package className="w-4 h-4 text-emerald-600" />
+            <span>دليل الأصناف ({productsList.length})</span>
+          </button>
+
+          <button
             onClick={() => setShowProductModal(true)}
             className="px-3.5 py-2 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-bold transition flex items-center gap-1.5 bg-white shadow-xs"
           >
@@ -494,7 +554,8 @@ export default function InventoryClientView({
                 <th className="py-3">تاريخ الانتهاء</th>
                 <th className="py-3">المتبقي / الأولي</th>
                 <th className="py-3">حالة الصلاحية</th>
-                <th className="py-3 pl-4">الوقت المتبقي</th>
+                <th className="py-3">الوقت المتبقي</th>
+                <th className="py-3 pl-4 text-center">الإجراءات</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -580,6 +641,22 @@ export default function InventoryClientView({
                           </span>
                         </div>
                       )}
+                    </td>
+                    <td className="py-3 pl-4 text-center">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setDeleteTarget({
+                            type: 'batch',
+                            id: batch.id,
+                            name: `تشغيلة رقم ${batch.batchNumber} (${batch.product.name})`,
+                          })
+                        }
+                        title="حذف التشغيلة"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </td>
                   </tr>
                 );
@@ -1114,6 +1191,131 @@ export default function InventoryClientView({
           </div>
         </div>
       )}
+
+      {/* Modal: Products Directory & Management (دليل المنتجات والأصناف وحذفها) */}
+      {showProductsModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-slate-100 space-y-4 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                  <Package className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">
+                    دليل المنتجات والأصناف المعرفة ({productsList.length})
+                  </h3>
+                  <div className="text-[11px] text-slate-500">
+                    استعراض جميع السلع وتكاليفها وإمكانية حذف أي صنف
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowProductsModal(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Search Bar */}
+            <div className="relative shrink-0">
+              <Search className="w-4 h-4 text-slate-400 absolute right-3 top-3" />
+              <input
+                type="text"
+                value={productSearch}
+                onChange={(e) => setProductSearch(e.target.value)}
+                placeholder="بحث عن منتج بالاسم أو التصنيف..."
+                className="w-full pr-9 pl-3 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+              />
+            </div>
+
+            {/* Products Table */}
+            <div className="overflow-y-auto border border-slate-200 rounded-2xl flex-1 text-xs">
+              <table className="w-full text-right">
+                <thead className="bg-slate-50 text-slate-500 border-b border-slate-200 sticky top-0">
+                  <tr>
+                    <th className="py-2.5 pr-3">اسم المنتج</th>
+                    <th className="py-2.5">التصنيف</th>
+                    <th className="py-2.5">سعر البيع</th>
+                    <th className="py-2.5">التكلفة</th>
+                    <th className="py-2.5">الصلاحية</th>
+                    <th className="py-2.5 pl-3 text-center">إجراءات</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {productsList
+                    .filter((p) => {
+                      if (!productSearch.trim()) return true;
+                      const q = productSearch.toLowerCase();
+                      return (
+                        p.name.toLowerCase().includes(q) ||
+                        (p.category && p.category.toLowerCase().includes(q))
+                      );
+                    })
+                    .map((prod) => (
+                      <tr key={prod.id} className="hover:bg-slate-50/70 transition">
+                        <td className="py-2.5 pr-3 font-bold text-slate-900">{prod.name}</td>
+                        <td className="py-2.5">
+                          <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-semibold text-[11px]">
+                            {prod.category}
+                          </span>
+                        </td>
+                        <td className="py-2.5 font-mono font-bold text-emerald-700">
+                          {prod.price} ج.م
+                        </td>
+                        <td className="py-2.5 font-mono text-slate-600">
+                          {prod.cost} ج.م
+                        </td>
+                        <td className="py-2.5 text-slate-500">
+                          {prod.shelfLifeDays} يوم
+                        </td>
+                        <td className="py-2.5 pl-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDeleteTarget({
+                                type: 'product',
+                                id: prod.id,
+                                name: `المنتج: ${prod.name}`,
+                              })
+                            }
+                            title="حذف المنتج"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-slate-100 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowProductsModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold transition"
+              >
+                إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Universal Delete Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={deleteTarget !== null}
+        itemName={deleteTarget?.name}
+        isLoading={isDeleting}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => {
+          if (!isDeleting) setDeleteTarget(null);
+        }}
+      />
     </div>
   );
 }

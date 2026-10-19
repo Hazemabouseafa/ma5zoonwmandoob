@@ -8,7 +8,9 @@ import {
   updateEmployeeAction,
   deleteEmployeeAction,
   recordPayrollPaymentAction,
+  deletePayrollPaymentAction,
 } from '@/lib/actions';
+import ConfirmDeleteModal from '@/components/admin/ConfirmDeleteModal';
 import {
   Users,
   UserPlus,
@@ -49,7 +51,12 @@ export default function EmployeesClientView({
   // Modals state
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
-  const [deletingEmployee, setDeletingEmployee] = useState<Employee | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    type: 'employee' | 'payroll';
+    id: string;
+    name: string;
+  } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [payoutEmployee, setPayoutEmployee] = useState<Employee | null>(null);
 
   // Form states
@@ -165,24 +172,36 @@ export default function EmployeesClientView({
     }
   };
 
-  const handleDeleteEmployee = async () => {
-    if (!deletingEmployee) return;
-    setLoading(true);
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
     setMsg(null);
 
     try {
-      const res = await deleteEmployeeAction(deletingEmployee.id);
-      if (res.success) {
-        setMsg({ type: 'success', text: res.message || 'تم حذف الموظف بنجاح' });
-        setDeletingEmployee(null);
-        router.refresh();
+      if (deleteTarget.type === 'employee') {
+        const res = await deleteEmployeeAction(deleteTarget.id);
+        if (res.success) {
+          setEmployees((prev) => prev.filter((e) => e.id !== deleteTarget.id));
+          setMsg({ type: 'success', text: res.message || 'تم حذف الموظف بنجاح' });
+        } else {
+          setMsg({ type: 'error', text: res.error || 'تعذر حذف الموظف' });
+        }
       } else {
-        setMsg({ type: 'error', text: res.error || 'تعذر حذف الموظف' });
+        const res = await deletePayrollPaymentAction(deleteTarget.id);
+        if (res.success) {
+          setPayrollPayments((prev) => prev.filter((p) => p.id !== deleteTarget.id));
+          setMsg({ type: 'success', text: res.message || 'تم حذف سند صرف الراتب بنجاح' });
+        } else {
+          setMsg({ type: 'error', text: res.error || 'تعذر حذف سند صرف الراتب' });
+        }
       }
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event('app:sync'));
+      router.refresh();
     } catch {
       setMsg({ type: 'error', text: 'حدث خطأ أثناء الحذف' });
     } finally {
-      setLoading(false);
+      setIsDeleting(false);
+      setDeleteTarget(null);
     }
   };
 
@@ -446,7 +465,13 @@ export default function EmployeesClientView({
                             <Edit className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => setDeletingEmployee(emp)}
+                            onClick={() =>
+                              setDeleteTarget({
+                                type: 'employee',
+                                id: emp.id,
+                                name: `الموظف: ${emp.name}`,
+                              })
+                            }
                             title="حذف الموظف"
                             className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
                           >
@@ -483,6 +508,7 @@ export default function EmployeesClientView({
                     <th className="py-3 px-4">عن شهر</th>
                     <th className="py-3 px-4">المبلغ المنصرف</th>
                     <th className="py-3 px-4">ملاحظات</th>
+                    <th className="py-3 px-4 text-center">الإجراءات</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-sm">
@@ -514,6 +540,22 @@ export default function EmployeesClientView({
                       </td>
                       <td className="py-3.5 px-4 text-xs text-slate-500 max-w-xs truncate">
                         {p.notes || '-'}
+                      </td>
+                      <td className="py-3.5 px-4 text-center">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDeleteTarget({
+                              type: 'payroll',
+                              id: p.id,
+                              name: `سند صرف راتب للموظف: ${p.employeeName} (مبلغ: ${p.amount.toLocaleString('ar-EG')} ج.م عن شهر: ${p.month})`,
+                            })
+                          }
+                          title="حذف سند الصرف"
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -750,40 +792,16 @@ export default function EmployeesClientView({
         </div>
       )}
 
-      {/* MODAL: Delete Employee Confirmation */}
-      {deletingEmployee && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 animate-in fade-in zoom-in-95 duration-200">
-            <div className="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-4">
-              <Trash2 className="w-6 h-6" />
-            </div>
-            <h3 className="text-lg font-black text-slate-900 text-center">
-              تأكيد حذف الموظف
-            </h3>
-            <p className="text-sm text-slate-500 text-center mt-2">
-              هل أنت متأكد من رغبتك في حذف الموظف{' '}
-              <strong className="text-slate-800">{deletingEmployee.name}</strong>؟
-            </p>
-            <div className="mt-6 flex items-center justify-center gap-3">
-              <button
-                type="button"
-                onClick={() => setDeletingEmployee(null)}
-                className="px-5 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition"
-              >
-                إلغاء
-              </button>
-              <button
-                type="button"
-                disabled={loading}
-                onClick={handleDeleteEmployee}
-                className="px-5 py-2.5 rounded-xl text-sm font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-sm transition disabled:opacity-50"
-              >
-                {loading ? 'جاري الحذف...' : 'نعم، احذف'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Universal Delete Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={deleteTarget !== null}
+        itemName={deleteTarget?.name}
+        isLoading={isDeleting}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => {
+          if (!isDeleting) setDeleteTarget(null);
+        }}
+      />
     </div>
   );
 }
