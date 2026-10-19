@@ -169,9 +169,14 @@ export async function createBatchAction(formData: FormData) {
     const batchNumber = ((formData.get('batchNumber') as string) || '').trim();
     const quantity = parseInt(formData.get('quantity') as string, 10);
     const productionDate = (formData.get('productionDate') as string) || new Date().toISOString();
+    const purchaseId = ((formData.get('purchaseId') as string) || '').trim();
+    const purchaseItemId = ((formData.get('purchaseItemId') as string) || '').trim();
 
-    if (!productId) {
-      return { success: false, error: 'يرجى اختيار الصنف أو المنتج أولاً' };
+    if (!purchaseId || !purchaseItemId) {
+      return {
+        success: false,
+        error: 'يرجى تحديد فاتورة الشراء والتوريد التابعة للمورد أولاً (الربط الإلزامي بفواتير الموردين)',
+      };
     }
 
     if (isNaN(quantity) || quantity <= 0) {
@@ -183,11 +188,15 @@ export async function createBatchAction(formData: FormData) {
       batchNumber: batchNumber || `BAT-${Date.now().toString().slice(-6)}`,
       quantity,
       productionDate,
+      purchaseId,
+      purchaseItemId,
     });
 
     revalidatePath('/admin/inventory');
+    revalidatePath('/admin/suppliers');
+    revalidatePath('/admin/profit-loss');
     revalidatePath('/admin');
-    return { success: true, message: `تم تسجيل التشغيلة (${newBatch.batchNumber}) بنجاح بنظام FIFO`, batch: newBatch };
+    return { success: true, message: `تم تسجيل التشغيلة (${newBatch.batchNumber}) بنجاح وربطها بفاتورة المورد`, batch: newBatch };
   } catch (err: any) {
     return { success: false, error: err.message || 'حدث خطأ أثناء تسجيل التشغيلة' };
   }
@@ -731,6 +740,7 @@ export async function createSupplierPurchaseAction(data: {
   paymentType: 'cash' | 'credit';
   paidAmount?: number;
   notes?: string;
+  autoReceiveBatches?: boolean;
   items: {
     productId: string;
     quantity: number;
@@ -934,4 +944,53 @@ export async function recordPayrollPaymentAction(formData: FormData) {
     return { success: false, error: err.message || 'فشل تسجيل صرف الراتب' };
   }
 }
+
+// ----------------------------------------------------
+// ADMIN: Rep Monthly Target Management (تحديد تارجت المندوب شهرياً)
+// ----------------------------------------------------
+export async function setRepTargetAction(formData: FormData) {
+  try {
+    const user = await getCurrentUser();
+    if (!user || user.role !== 'admin') {
+      return { success: false, error: 'غير مصرح لك بإجراء هذه العملية' };
+    }
+
+    const repId = (formData.get('repId') as string)?.trim();
+    const month = (formData.get('month') as string)?.trim();
+    const targetAmount = parseFloat(formData.get('targetAmount') as string) || 0;
+    const notes = ((formData.get('notes') as string) || '').trim();
+
+    if (!repId) {
+      return { success: false, error: 'يرجى اختيار المندوب' };
+    }
+
+    if (!month) {
+      return { success: false, error: 'يرجى تحديد الشهر المستهدف للتارجت' };
+    }
+
+    if (isNaN(targetAmount) || targetAmount < 0) {
+      return { success: false, error: 'يرجى إدخال مبلغ تارجت صحيح' };
+    }
+
+    const target = await dbStore.setRepTarget({
+      repId,
+      month,
+      targetAmount,
+      notes,
+    });
+
+    revalidatePath('/admin/reps');
+    revalidatePath(`/admin/reps/${repId}`);
+    revalidatePath('/admin');
+
+    return {
+      success: true,
+      message: `تم حفظ تارجت المندوب لشهر (${month}) بمبلغ ${targetAmount.toLocaleString('ar-EG')} ج.م بنجاح`,
+      target,
+    };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'فشل حفظ تارجت المندوب' };
+  }
+}
+
 

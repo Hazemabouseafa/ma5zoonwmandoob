@@ -23,6 +23,8 @@ import {
   Employee,
   PayrollPayment,
   ProfitLossSummary,
+  RepTarget,
+  RepMonthlyPerformance,
 } from '@/types';
 
 interface DatabaseSchema {
@@ -43,6 +45,7 @@ interface DatabaseSchema {
   supplierPayments: SupplierPayment[];
   employees: Employee[];
   payrollPayments: PayrollPayment[];
+  repTargets: RepTarget[];
 }
 
 function getDbFilePath(): string {
@@ -104,6 +107,7 @@ function getInitialData(): DatabaseSchema {
     supplierPayments: [],
     employees: [],
     payrollPayments: [],
+    repTargets: [],
   };
 }
 
@@ -261,6 +265,7 @@ class DatabaseStore {
           if (!raw.supplierPayments || !Array.isArray(raw.supplierPayments)) raw.supplierPayments = [];
           if (!raw.employees || !Array.isArray(raw.employees)) raw.employees = [];
           if (!raw.payrollPayments || !Array.isArray(raw.payrollPayments)) raw.payrollPayments = [];
+          if (!raw.repTargets || !Array.isArray(raw.repTargets)) raw.repTargets = [];
 
           this.data = raw;
           this.lastRemoteSyncTime = remoteTime;
@@ -382,6 +387,11 @@ class DatabaseStore {
 
         if (!this.data.payrollPayments || !Array.isArray(this.data.payrollPayments)) {
           this.data.payrollPayments = [];
+          this.persistToDisk();
+        }
+
+        if (!this.data.repTargets || !Array.isArray(this.data.repTargets)) {
+          this.data.repTargets = [];
           this.persistToDisk();
         }
       } else {
@@ -589,14 +599,98 @@ class DatabaseStore {
     });
   }
 
+  async getAvailableSupplierPurchaseItems() {
+    await this.ensureLoaded();
+    const purchases = this.data.supplierPurchases || [];
+    const suppliers = this.data.suppliers || [];
+    const products = this.data.products || [];
+    const batches = this.data.batches || [];
+
+    const availableItems: {
+      purchaseId: string;
+      purchaseNumber: string;
+      supplierId: string;
+      supplierName: string;
+      purchaseItemId: string;
+      productId: string;
+      productName: string;
+      unitCost: number;
+      totalInvoiceQty: number;
+      assignedQty: number;
+      remainingQty: number;
+      productionDate: string;
+      createdAt: string;
+    }[] = [];
+
+    for (const purchase of purchases) {
+      const supplier = suppliers.find((s) => s.id === purchase.supplierId);
+      const items = purchase.items || [];
+      for (const item of items) {
+        const prod = products.find((p) => p.id === item.productId);
+        // Calculate how much quantity of this purchase item has already been assigned to warehouse batches
+        const assignedQty = batches
+          .filter((b) => b.purchaseItemId === item.id || (b.purchaseId === purchase.id && b.productId === item.productId))
+          .reduce((sum, b) => sum + (Number(b.initialQuantity) || Number(b.quantity) || 0), 0);
+
+        const remainingQty = Math.max(0, item.quantity - assignedQty);
+
+        availableItems.push({
+          purchaseId: purchase.id,
+          purchaseNumber: purchase.purchaseNumber,
+          supplierId: purchase.supplierId,
+          supplierName: supplier?.name || 'مورد غير مسجل',
+          purchaseItemId: item.id,
+          productId: item.productId,
+          productName: prod?.name || item.productName || 'صنف',
+          unitCost: item.unitCost,
+          totalInvoiceQty: item.quantity,
+          assignedQty,
+          remainingQty,
+          productionDate: item.productionDate,
+          createdAt: purchase.createdAt,
+        });
+      }
+    }
+
+    return availableItems;
+  }
+
   async createBatch(data: {
     productId: string;
     batchNumber: string;
     quantity: number;
     productionDate: string;
+    purchaseId?: string;
+    purchaseItemId?: string;
   }): Promise<InventoryBatch> {
     return this.transaction((db) => {
-      const targetProdId = String(data.productId).trim();
+      if (!db.batches) db.batches = [];
+      if (!db.suppliers) db.suppliers = [];
+      if (!db.supplierPurchases) db.supplierPurchases = [];
+      if (!db.supplierPurchaseItems) db.supplierPurchaseItems = [];
+
+      const qty = Number(data.quantity);
+      if (isNaN(qty) || qty <= 0) {
+        throw new Error('يرجى إدخال كمية صحيحة للتشغيلة أكبر من الصفر');
+      }
+
+      // Mandatory Supplier Invoice Linkage Rule
+      if (!data.purchaseId || !data.purchaseItemId) {
+        throw new Error('يرجى تحديد فاتورة الشراء التابعة للمورد أولاً (الربط الإلزامي بفواتير الموردين)');
+      }
+
+      const purchase = db.supplierPurchases.find((p) => p.id === data.purchaseId);
+      if (!purchase) {
+        throw new Error('فاتورة الشراء المحددة للمورد غير موجودة بالنظام');
+      }
+
+      const purchaseItem = (purchase.items || []).find((i) => i.id === data.purchaseItemId) ||
+        db.supplierPurchaseItems.find((i) => i.id === data.purchaseItemId);
+      if (!purchaseItem) {
+        throw new Error('الصنف المحدد غير مدرج في فاتورة الشراء المختارة للمورد');
+      }
+
+      const targetProdId = String(purchaseItem.productId || data.productId).trim();
       const prod = db.products.find(
         (p) =>
           p.id === targetProdId ||
@@ -605,19 +699,43 @@ class DatabaseStore {
       );
       if (!prod) throw new Error('المنتج المحدد غير موجود، يرجى إعادة المحاولة');
 
+      // Quantity Validation Check (منع تجاوز الكمية الواردة)
+      const assignedQty = db.batches
+        .filter((b) => b.purchaseItemId === purchaseItem.id || (b.purchaseId === purchase.id && b.productId === prod.id))
+        .reduce((sum, b) => sum + (Number(b.initialQuantity) || Number(b.quantity) || 0), 0);
+
+      const remainingQty = Math.max(0, purchaseItem.quantity - assignedQty);
+
+      if (qty > remainingQty) {
+        throw new Error(
+          `عذراً، الكمية المراد إدخالها للتشغيلة (${qty}) أكبر من الكمية المتبقية في فاتورة المورد المحددة (المتبقي: ${remainingQty})`
+        );
+      }
+
       const shelfDays = prod.shelfLifeDays || 1;
-      const expiryDate = calculateExpiry(data.productionDate, shelfDays);
-      const status = determineBatchStatus(expiryDate, data.quantity);
+      const prodDate = data.productionDate || purchaseItem.productionDate || new Date().toISOString();
+      const expiryDate = calculateExpiry(prodDate, shelfDays);
+      const status = determineBatchStatus(expiryDate, qty);
+
+      // Link unit cost from supplier purchase invoice
+      const unitCost = purchaseItem.unitCost || prod.cost || 0;
+      if (unitCost > 0) {
+        prod.cost = unitCost;
+      }
 
       const newBatch: InventoryBatch = {
-        id: `bat_${Date.now()}`,
-        productId: data.productId,
-        batchNumber: data.batchNumber || `BATCH-${Date.now().toString().slice(-6)}`,
-        initialQuantity: data.quantity,
-        quantity: data.quantity,
-        productionDate: data.productionDate,
+        id: `bat_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        productId: prod.id,
+        batchNumber: data.batchNumber || `BAT-${Date.now().toString().slice(-6)}`,
+        initialQuantity: qty,
+        quantity: qty,
+        productionDate: prodDate,
         expiryDate,
         status,
+        supplierId: purchase.supplierId,
+        purchaseId: purchase.id,
+        purchaseItemId: purchaseItem.id,
+        unitCost,
         createdAt: new Date().toISOString(),
       };
 
@@ -1507,6 +1625,7 @@ class DatabaseStore {
     paymentType: 'cash' | 'credit';
     paidAmount?: number;
     notes?: string;
+    autoReceiveBatches?: boolean;
     items: {
       productId: string;
       quantity: number;
@@ -1532,8 +1651,9 @@ class DatabaseStore {
 
       let totalAmount = 0;
       const purchaseItems: SupplierPurchaseItem[] = [];
+      const autoReceive = data.autoReceiveBatches !== false;
 
-      // Process each item and inject directly into Central Main Warehouse batches
+      // Process each item and inject into Central Main Warehouse batches if autoReceive is true
       for (const item of data.items) {
         const prod = db.products.find((p) => p.id === item.productId);
         if (!prod) throw new Error(`المنتج ${item.productId} غير موجود`);
@@ -1556,23 +1676,29 @@ class DatabaseStore {
         const status = determineBatchStatus(expiryDate, qty);
 
         const batchNumber = `BAT-SUP-${Date.now().toString().slice(-5)}-${Math.floor(Math.random() * 900 + 100)}`;
+        const purchaseItemId = `pitem_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+        let createdBatchId: string | undefined = undefined;
 
-        // Create the batch in the Central Warehouse
-        const newBatch: InventoryBatch = {
-          id: `bat_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-          productId: prod.id,
-          batchNumber,
-          initialQuantity: qty,
-          quantity: qty,
-          productionDate,
-          expiryDate,
-          status,
-          supplierId: supplier.id,
-          purchaseId,
-          unitCost: cost,
-          createdAt: new Date().toISOString(),
-        };
-        db.batches.push(newBatch);
+        if (autoReceive) {
+          // Create the batch in the Central Warehouse
+          const newBatch: InventoryBatch = {
+            id: `bat_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            productId: prod.id,
+            batchNumber,
+            initialQuantity: qty,
+            quantity: qty,
+            productionDate,
+            expiryDate,
+            status,
+            supplierId: supplier.id,
+            purchaseId,
+            purchaseItemId,
+            unitCost: cost,
+            createdAt: new Date().toISOString(),
+          };
+          db.batches.push(newBatch);
+          createdBatchId = newBatch.id;
+        }
 
         // Update product cost in catalog
         if (cost > 0) {
@@ -1580,7 +1706,7 @@ class DatabaseStore {
         }
 
         const purchaseItem: SupplierPurchaseItem = {
-          id: `pitem_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          id: purchaseItemId,
           purchaseId,
           productId: prod.id,
           productName: prod.name,
@@ -1589,7 +1715,7 @@ class DatabaseStore {
           totalCost: lineTotal,
           productionDate,
           expiryDate,
-          batchId: newBatch.id,
+          batchId: createdBatchId,
           createdAt: new Date().toISOString(),
         };
 
@@ -2027,6 +2153,153 @@ class DatabaseStore {
           employeeRole: emp?.role || '-',
         };
       }),
+    };
+  }
+
+  // -------------------------------------------------------------
+  // REP TARGETS & MONTHLY PERFORMANCE (تتبع أداء وتارجت المناديب)
+  // -------------------------------------------------------------
+  async getRepTargets(month?: string): Promise<RepTarget[]> {
+    await this.ensureLoaded();
+    const targets = this.data.repTargets || [];
+    if (!month) return [...targets];
+    return targets.filter((t) => t.month === month);
+  }
+
+  async setRepTarget(data: {
+    repId: string;
+    month: string;
+    targetAmount: number;
+    notes?: string;
+  }): Promise<RepTarget> {
+    return this.transaction((db) => {
+      if (!db.repTargets) db.repTargets = [];
+      const rep = db.users.find((u) => u.id === data.repId && u.role === 'rep');
+      if (!rep) throw new Error('المندوب المحدد غير مسجل بالنظام');
+
+      const targetAmount = Math.max(0, Number(data.targetAmount) || 0);
+      const month = (data.month || '').trim();
+      if (!month) throw new Error('يرجى تحديد الشهر المستهدف');
+
+      const existingIdx = db.repTargets.findIndex(
+        (t) => t.repId === data.repId && t.month === month
+      );
+
+      if (existingIdx !== -1) {
+        db.repTargets[existingIdx] = {
+          ...db.repTargets[existingIdx],
+          targetAmount,
+          notes: data.notes?.trim() || db.repTargets[existingIdx].notes,
+          updatedAt: new Date().toISOString(),
+        };
+        return db.repTargets[existingIdx];
+      }
+
+      const newTarget: RepTarget = {
+        id: `tgt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        repId: rep.id,
+        month,
+        targetAmount,
+        notes: data.notes?.trim() || '',
+        createdAt: new Date().toISOString(),
+      };
+
+      db.repTargets.push(newTarget);
+      return newTarget;
+    });
+  }
+
+  async getMonthlyRepsPerformance(targetMonth?: string) {
+    await this.ensureLoaded();
+
+    const reps = (this.data.users || []).filter((u) => u.role === 'rep');
+    const invoices = this.data.invoices || [];
+    const collections = this.data.collections || [];
+    const targets = this.data.repTargets || [];
+
+    // Determine current month if not provided
+    const now = new Date();
+    const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const activeMonth = targetMonth || currentMonthStr;
+
+    // Collect all available months from invoices and targets
+    const monthsSet = new Set<string>();
+    monthsSet.add(currentMonthStr);
+    invoices.forEach((inv) => {
+      if (inv.createdAt) {
+        monthsSet.add(inv.createdAt.slice(0, 7));
+      }
+    });
+    targets.forEach((t) => {
+      if (t.month) monthsSet.add(t.month);
+    });
+    const availableMonths = Array.from(monthsSet).sort().reverse();
+
+    // Filter transactions for active month
+    const monthInvoices = invoices.filter((i) => i.createdAt && i.createdAt.startsWith(activeMonth));
+    const monthCollections = collections.filter((c) => c.createdAt && c.createdAt.startsWith(activeMonth));
+
+    const repsPerformance: RepMonthlyPerformance[] = reps.map((rep) => {
+      const repInvoices = monthInvoices.filter((i) => i.repId === rep.id);
+      const repCollections = monthCollections.filter((c) => c.repId === rep.id);
+      const repTarget = targets.find((t) => t.repId === rep.id && t.month === activeMonth);
+
+      const salesAmount = repInvoices.reduce((sum, inv) => sum + (Number(inv.totalAmount) || 0), 0);
+
+      const cashFromInvoices = repInvoices.reduce((sum, inv) => {
+        if (inv.paymentType === 'cash') return sum + (Number(inv.totalAmount) || 0);
+        return sum + (Number(inv.paidAmount) || 0);
+      }, 0);
+      const cashFromCols = repCollections.reduce((sum, col) => sum + (Number(col.amount) || 0), 0);
+      const collectedAmount = cashFromInvoices + cashFromCols;
+
+      const targetAmount = repTarget?.targetAmount || 0;
+      const achievementPercent = targetAmount > 0 ? (salesAmount / targetAmount) * 100 : 0;
+
+      let status: RepMonthlyPerformance['status'] = 'no_target';
+      if (targetAmount > 0) {
+        if (salesAmount >= targetAmount) {
+          status = 'achieved';
+        } else if (achievementPercent >= 75) {
+          status = 'near_target';
+        } else {
+          status = 'in_progress';
+        }
+      }
+
+      return {
+        repId: rep.id,
+        repName: rep.name,
+        repPhone: rep.phone,
+        assignedRoute: rep.assignedRoute,
+        month: activeMonth,
+        targetAmount,
+        salesAmount,
+        collectedAmount,
+        invoicesCount: repInvoices.length,
+        achievementPercent,
+        status,
+      };
+    });
+
+    const totalTarget = repsPerformance.reduce((s, r) => s + r.targetAmount, 0);
+    const totalSales = repsPerformance.reduce((s, r) => s + r.salesAmount, 0);
+    const totalCollected = repsPerformance.reduce((s, r) => s + r.collectedAmount, 0);
+    const overallAchievementPercent = totalTarget > 0 ? (totalSales / totalTarget) * 100 : 0;
+    const achievedCount = repsPerformance.filter((r) => r.status === 'achieved').length;
+
+    return {
+      month: activeMonth,
+      availableMonths,
+      reps: repsPerformance,
+      summary: {
+        totalTarget,
+        totalSales,
+        totalCollected,
+        overallAchievementPercent,
+        achievedCount,
+        totalRepsCount: reps.length,
+      },
     };
   }
 }

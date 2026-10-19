@@ -51,6 +51,7 @@ export interface InventoryBatch {
   status: BatchStatus;
   supplierId?: string;
   purchaseId?: string;
+  purchaseItemId?: string;
   unitCost?: number;
   createdAt: string;
 }
@@ -252,3 +253,33 @@ export interface SessionUser {
   role: Role;
   assignedRoute?: string;
 }
+
+// -------------------------------------------------------------
+// REP MONTHLY TARGETS & PERFORMANCE (تارجت وأداء المناديب شهرياً)
+// -------------------------------------------------------------
+export interface RepTarget {
+  id: string;
+  repId: string;
+  month: string; // مثال: "2026-10"
+  targetAmount: number; // المبلغ المستهدف تحقيقه بالجنيه
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export type RepTargetStatus = 'achieved' | 'near_target' | 'in_progress' | 'no_target';
+
+export interface RepMonthlyPerformance {
+  repId: string;
+  repName: string;
+  repPhone?: string;
+  assignedRoute?: string;
+  month: string;
+  targetAmount: number;
+  salesAmount: number;
+  collectedAmount: number;
+  invoicesCount: number;
+  achievementPercent: number;
+  status: RepTargetStatus;
+}
+

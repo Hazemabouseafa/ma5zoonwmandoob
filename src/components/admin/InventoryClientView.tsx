@@ -25,23 +25,46 @@ import {
   Tags,
   Trash2,
   Building2,
+  FileCheck,
+  ShieldAlert,
 } from 'lucide-react';
+
+export interface AvailablePurchaseItem {
+  purchaseId: string;
+  purchaseNumber: string;
+  supplierId: string;
+  supplierName: string;
+  purchaseItemId: string;
+  productId: string;
+  productName: string;
+  unitCost: number;
+  totalInvoiceQty: number;
+  assignedQty: number;
+  remainingQty: number;
+  productionDate: string;
+  createdAt: string;
+}
 
 interface Props {
   products: Product[];
   batches: (InventoryBatch & { product: Product; hoursRemaining: number })[];
   categories: Category[];
+  availablePurchaseItems?: AvailablePurchaseItem[];
 }
 
 export default function InventoryClientView({
   products: initialProducts,
   batches: initialBatches,
   categories: initialCategories,
+  availablePurchaseItems: initialAvailableItems = [],
 }: Props) {
   const router = useRouter();
   const [productsList, setProductsList] = useState<Product[]>(initialProducts || []);
   const [batchesList, setBatchesList] = useState(initialBatches || []);
   const [categories, setCategories] = useState<Category[]>(initialCategories || []);
+  const [availableInvoices, setAvailableInvoices] = useState<AvailablePurchaseItem[]>(
+    initialAvailableItems || []
+  );
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [showProductModal, setShowProductModal] = useState(false);
@@ -61,6 +84,10 @@ export default function InventoryClientView({
   useEffect(() => {
     setCategories(initialCategories || []);
   }, [initialCategories]);
+
+  useEffect(() => {
+    setAvailableInvoices(initialAvailableItems || []);
+  }, [initialAvailableItems]);
 
   // Category Modal Form State
   const [newCatName, setNewCatName] = useState('');
@@ -85,10 +112,30 @@ export default function InventoryClientView({
     }
   }, [categories, productCategory]);
 
-  // Batch Form State & On-the-spot Product Creation
-  const [batchMode, setBatchMode] = useState<'existing' | 'new'>(
-    initialProducts.length === 0 ? 'new' : 'existing'
+  // Supplier Purchase Invoice Linkage State
+  const unassignedInvoices = availableInvoices.filter((i) => i.remainingQty > 0);
+  const [selectedPurchaseItemId, setSelectedPurchaseItemId] = useState<string>(
+    unassignedInvoices[0]?.purchaseItemId || ''
   );
+
+  // Synchronize selectedPurchaseItemId when unassigned invoices change
+  useEffect(() => {
+    if (unassignedInvoices.length > 0) {
+      if (!selectedPurchaseItemId || !unassignedInvoices.some((i) => i.purchaseItemId === selectedPurchaseItemId)) {
+        const first = unassignedInvoices[0];
+        setSelectedPurchaseItemId(first.purchaseItemId);
+        setBatchProductId(first.productId);
+        setBatchQuantity(Math.min(first.remainingQty, 50));
+      }
+    }
+  }, [unassignedInvoices, selectedPurchaseItemId]);
+
+  const selectedPurchaseItem = unassignedInvoices.find(
+    (i) => i.purchaseItemId === selectedPurchaseItemId
+  );
+
+  // Batch Form State & On-the-spot Product Creation
+  const [batchMode, setBatchMode] = useState<'existing' | 'new'>('existing');
   const [batchProductId, setBatchProductId] = useState(initialProducts[0]?.id || '');
   const [batchNumber, setBatchNumber] = useState('');
   const [batchQuantity, setBatchQuantity] = useState(50);
@@ -105,13 +152,6 @@ export default function InventoryClientView({
   const [newProductPrice, setNewProductPrice] = useState(35);
   const [newProductCost, setNewProductCost] = useState(28);
   const [newProductUnit, setNewProductUnit] = useState('كرتونة');
-
-  // Auto-switch to 'new' mode if no products exist
-  useEffect(() => {
-    if (productsList.length === 0) {
-      setBatchMode('new');
-    }
-  }, [productsList]);
 
   // Synchronize category selection for new product in batch modal
   useEffect(() => {
@@ -165,86 +205,78 @@ export default function InventoryClientView({
     setMsg(null);
 
     try {
-      if (batchMode === 'new') {
-        if (!newProductName.trim()) {
-          setMsg({ type: 'error', text: 'يرجى إدخال اسم الصنف أو المنتج الوارد' });
-          setLoading(false);
-          return;
-        }
-
-        const chosenCat = newProductCategory.trim() || (categories[0]?.name || 'عام');
-        const formData = new FormData();
-        formData.append('name', newProductName.trim());
-        formData.append('category', chosenCat);
-        formData.append('shelfLifeDays', (newProductShelfLife || 1).toString());
-        formData.append('price', (newProductPrice || 0).toString());
-        formData.append('cost', (newProductCost || 0).toString());
-        formData.append('unit', newProductUnit.trim() || 'كرتونة');
-        formData.append('batchNumber', batchNumber.trim() || `BAT-${Date.now().toString().slice(-6)}`);
-        formData.append('quantity', (batchQuantity || 1).toString());
-        formData.append('productionDate', new Date(productionDate).toISOString());
-
-        const res = await createProductAndBatchAction(formData);
+      if (!selectedPurchaseItem) {
+        setMsg({
+          type: 'error',
+          text: 'يرجى تحديد فاتورة الشراء والتوريد التابعة للمورد أولاً (الربط الإلزامي بفواتير الموردين)',
+        });
         setLoading(false);
+        return;
+      }
 
-        if (res.success && res.product && res.batch) {
-          const newProd = res.product;
+      const qty = Number(batchQuantity);
+      if (isNaN(qty) || qty <= 0) {
+        setMsg({ type: 'error', text: 'يرجى إدخال كمية صحيحة للتشغيلة أكبر من الصفر' });
+        setLoading(false);
+        return;
+      }
+
+      if (qty > selectedPurchaseItem.remainingQty) {
+        setMsg({
+          type: 'error',
+          text: `عذراً، الكمية المراد إدخالها للتشغيلة (${qty}) أكبر من الكمية المتبقية في فاتورة المورد المحددة (المتبقي: ${selectedPurchaseItem.remainingQty})`,
+        });
+        setLoading(false);
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('productId', selectedPurchaseItem.productId);
+      formData.append('batchNumber', batchNumber.trim() || `BAT-${Date.now().toString().slice(-6)}`);
+      formData.append('quantity', qty.toString());
+      formData.append('productionDate', new Date(productionDate).toISOString());
+      formData.append('purchaseId', selectedPurchaseItem.purchaseId);
+      formData.append('purchaseItemId', selectedPurchaseItem.purchaseItemId);
+
+      const res = await createBatchAction(formData);
+      setLoading(false);
+
+      if (res.success && res.batch) {
+        const prod = productsList.find((p) => p.id === selectedPurchaseItem.productId) || selectedProduct;
+        if (prod) {
           const newBat = {
             ...res.batch,
-            product: newProd,
-            hoursRemaining: (newProd.shelfLifeDays || 1) * 24,
+            product: prod,
+            hoursRemaining: (prod.shelfLifeDays || 1) * 24,
           };
-          setProductsList((prev) => [...prev, newProd]);
           setBatchesList((prev) => [newBat, ...prev]);
-          setBatchProductId(newProd.id);
-          setNewProductName('');
-          setBatchNumber('');
-          setShowBatchModal(false);
-          setMsg({ type: 'success', text: res.message || 'تم تسجيل الصنف والتشغيلة بنجاح' });
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new Event('app:sync'));
-          }
-          router.refresh();
-        } else {
-          setMsg({ type: 'error', text: res.error || 'فشل تسجيل الصنف والتشغيلة' });
         }
+
+        // Update remaining quantity in local state
+        setAvailableInvoices((prev) =>
+          prev.map((inv) =>
+            inv.purchaseItemId === selectedPurchaseItem.purchaseItemId
+              ? {
+                  ...inv,
+                  assignedQty: inv.assignedQty + qty,
+                  remainingQty: Math.max(0, inv.remainingQty - qty),
+                }
+              : inv
+          )
+        );
+
+        setMsg({
+          type: 'success',
+          text: res.message || 'تم تسجيل التشغيلة بنجاح وربطها بفاتورة المورد بنظام FIFO',
+        });
+        setShowBatchModal(false);
+        setBatchNumber('');
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('app:sync'));
+        }
+        router.refresh();
       } else {
-        const targetProdId = batchProductId || productsList[0]?.id || '';
-        if (!targetProdId) {
-          setMsg({ type: 'error', text: 'يرجى اختيار صنف أو تسجيل صنف جديد' });
-          setLoading(false);
-          return;
-        }
-
-        const formData = new FormData();
-        formData.append('productId', targetProdId);
-        formData.append('batchNumber', batchNumber.trim() || `BAT-${Date.now().toString().slice(-6)}`);
-        formData.append('quantity', batchQuantity.toString());
-        formData.append('productionDate', new Date(productionDate).toISOString());
-
-        const res = await createBatchAction(formData);
-        setLoading(false);
-
-        if (res.success && res.batch) {
-          const prod = productsList.find((p) => p.id === targetProdId) || selectedProduct;
-          if (prod) {
-            const newBat = {
-              ...res.batch,
-              product: prod,
-              hoursRemaining: (prod.shelfLifeDays || 1) * 24,
-            };
-            setBatchesList((prev) => [newBat, ...prev]);
-          }
-          setMsg({ type: 'success', text: res.message || 'تم تسجيل التشغيلة بنجاح' });
-          setShowBatchModal(false);
-          setBatchNumber('');
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new Event('app:sync'));
-          }
-          router.refresh();
-        } else {
-          setMsg({ type: 'error', text: res.error || 'حدث خطأ أثناء تسجيل التشغيلة' });
-        }
+        setMsg({ type: 'error', text: res.error || 'حدث خطأ أثناء تسجيل التشغيلة' });
       }
     } catch (err: any) {
       setLoading(false);
@@ -583,280 +615,211 @@ export default function InventoryClientView({
               </button>
             </div>
 
-            {/* Mode Selector Tabs (if products exist) */}
-            {productsList.length > 0 ? (
-              <div className="flex items-center p-1 bg-slate-100 rounded-xl mb-4 text-xs font-bold">
-                <button
-                  type="button"
-                  onClick={() => setBatchMode('existing')}
-                  className={`flex-1 py-2 rounded-lg transition ${
-                    batchMode === 'existing'
-                      ? 'bg-white text-slate-900 shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  اختيار صنف مسجل ({productsList.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setBatchMode('new')}
-                  className={`flex-1 py-2 rounded-lg transition ${
-                    batchMode === 'new'
-                      ? 'bg-emerald-600 text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  + صنف وارد جديد لأول مرة
-                </button>
+            {unassignedInvoices.length === 0 ? (
+              <div className="space-y-4">
+                <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-sm space-y-2">
+                  <div className="flex items-center gap-2 font-bold text-amber-950">
+                    <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0" />
+                    <span>تنبيه نظام الرقابة والتدقيق (الربط الإلزامي بفواتير الموردين)</span>
+                  </div>
+                  <p className="text-xs text-amber-800 leading-relaxed">
+                    بناءً على معايير الانضباط المالي والمخزني، لا يمكن إضافة أي تشغيلة بالمخزن الرئيسي دون ربطها بفاتورة شراء معتمدة من المورد.
+                    حالياً، لا توجد فواتير شراء موردين بها كميات واردة غير مسندة لتشغيلات.
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowBatchModal(false)}
+                    className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 transition"
+                  >
+                    إغلاق
+                  </button>
+                  <Link
+                    href="/admin/suppliers"
+                    className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-600/20 transition flex items-center gap-1.5"
+                  >
+                    <Building2 className="w-4 h-4" />
+                    <span>الانتقال لتسجيل فاتورة شراء مورد جديدة</span>
+                  </Link>
+                </div>
               </div>
             ) : (
-              <div className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>
-                  أدخل بيانات الصنف الوارد وتفاصيل التشغيلة أدناه وسيتم حفظهما في المخزون مباشرة معاً!
-                </span>
-              </div>
-            )}
-
-            <form onSubmit={handleAddBatch} className="space-y-4">
-              {batchMode === 'existing' && productsList.length > 0 ? (
+              <form onSubmit={handleAddBatch} className="space-y-4">
+                {/* 1. Mandatory Supplier Purchase Linkage Dropdown */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    اختر الصنف / المنتج المسجل
-                  </label>
-                  <select
-                    name="productId"
-                    value={batchProductId || productsList[0]?.id || ''}
-                    onChange={(e) => setBatchProductId(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 bg-white font-medium"
-                  >
-                    {productsList.map((p) => {
-                      const shelfLabel =
-                        p.shelfLifeDays === 1 ? 'صلاحية يوم واحد' : `صلاحية ${p.shelfLifeDays} أيام`;
-                      const catLabel =
-                        p.category === 'dairy' ? 'ألبان' : p.category === 'juice' ? 'عصائر' : p.category || 'عام';
-                      return (
-                        <option key={p.id} value={p.id}>
-                          {p.name} ({catLabel} - {shelfLabel})
-                        </option>
-                      );
-                    })}
-                  </select>
-                </div>
-              ) : (
-                /* On-the-spot Product Fields */
-                <div className="space-y-3 p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
-                  <div className="text-xs font-bold text-slate-800 flex items-center justify-between">
-                    <span>بيانات الصنف الجديد</span>
-                    <span className="text-[10px] text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
-                      تسجيل فوري
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-slate-700">
+                      فاتورة شراء وتوريد المورد (ربط إلزامي) <span className="text-rose-500">*</span>
+                    </label>
+                    <span className="text-[11px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100 flex items-center gap-1">
+                      <FileCheck className="w-3 h-3" />
+                      <span>تدقيق مالي ومخزني</span>
                     </span>
                   </div>
+                  <select
+                    value={selectedPurchaseItemId}
+                    onChange={(e) => {
+                      setSelectedPurchaseItemId(e.target.value);
+                      const item = availableInvoices.find((i) => i.purchaseItemId === e.target.value);
+                      if (item) {
+                        setBatchProductId(item.productId);
+                        setBatchQuantity(Math.min(item.remainingQty, 50));
+                      }
+                    }}
+                    required
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 bg-white font-medium"
+                  >
+                    {unassignedInvoices.map((inv) => (
+                      <option key={inv.purchaseItemId} value={inv.purchaseItemId}>
+                        [{inv.purchaseNumber}] — {inv.supplierName} — {inv.productName} (المتبقي: {inv.remainingQty} كرتونة)
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
+                {/* 2. Detailed Purchase Item Badge & Info Card */}
+                {selectedPurchaseItem && (
+                  <div className="p-3.5 bg-blue-50/70 border border-blue-200/80 rounded-2xl space-y-2.5">
+                    <div className="flex items-center justify-between text-xs font-bold text-blue-950">
+                      <span className="flex items-center gap-1">
+                        <span>رقم الفاتورة:</span>
+                        <strong className="font-mono text-blue-700">{selectedPurchaseItem.purchaseNumber}</strong>
+                      </span>
+                      <span>المورد: <strong className="text-slate-900">{selectedPurchaseItem.supplierName}</strong></span>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <div className="bg-white/90 p-2 rounded-xl text-center border border-slate-100 shadow-xs">
+                        <div className="text-[10px] text-slate-400 font-bold">إجمالي كمية الفاتورة</div>
+                        <div className="font-black text-slate-800 text-sm mt-0.5">{selectedPurchaseItem.totalInvoiceQty} كرتونة</div>
+                      </div>
+                      <div className="bg-white/90 p-2 rounded-xl text-center border border-slate-100 shadow-xs">
+                        <div className="text-[10px] text-slate-400 font-bold">مسند سابقاً لتشغيلات</div>
+                        <div className="font-black text-slate-800 text-sm mt-0.5">{selectedPurchaseItem.assignedQty} كرتونة</div>
+                      </div>
+                      <div className="bg-emerald-50/90 p-2 rounded-xl text-center border border-emerald-300 shadow-xs">
+                        <div className="text-[10px] text-emerald-800 font-bold">المتبقي المتاح للإدخال</div>
+                        <div className="font-black text-emerald-700 text-sm mt-0.5">{selectedPurchaseItem.remainingQty} كرتونة</div>
+                      </div>
+                    </div>
+
+                    <div className="text-[11px] text-slate-500 flex items-center justify-between pt-1 border-t border-blue-100">
+                      <span>الصنف المربوط: <strong className="text-slate-800">{selectedPurchaseItem.productName}</strong></span>
+                      <span>سعر التكلفة: <strong className="text-emerald-700 font-mono">{selectedPurchaseItem.unitCost} ج.م</strong></span>
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. Real-time Quantity Validation Warning */}
+                {selectedPurchaseItem && batchQuantity > selectedPurchaseItem.remainingQty && (
+                  <div className="p-3 rounded-xl bg-rose-50 border border-rose-300 text-xs font-bold text-rose-800 flex items-center gap-2 animate-pulse">
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>
+                      عذراً، الكمية المراد إدخالها للتشغيلة ({batchQuantity}) أكبر من الكمية المتبقية في فاتورة المورد المحددة (المتبقي: {selectedPurchaseItem.remainingQty})
+                    </span>
+                  </div>
+                )}
+
+                {/* 4. Batch Code & Quantity Inputs */}
+                <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      اسم الصنف أو المنتج *
+                      رقم التشغيلة (Batch Code)
                     </label>
                     <input
                       type="text"
-                      required
-                      value={newProductName}
-                      onChange={(e) => setNewProductName(e.target.value)}
-                      placeholder="مثلاً: حليب طازج 1 لتر أو عصير برتقال..."
-                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 bg-white font-medium"
+                      value={batchNumber}
+                      onChange={(e) => setBatchNumber(e.target.value)}
+                      placeholder="مثلاً: BAT-001 (تلقائي)"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 font-mono"
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-xs font-bold text-slate-700">التصنيف *</label>
-                        <button
-                          type="button"
-                          onClick={() => setShowCategoriesModal(true)}
-                          className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800"
-                        >
-                          + إدارة التصنيفات
-                        </button>
-                      </div>
-                      {categories.length > 0 ? (
-                        <select
-                          value={newProductCategory}
-                          onChange={(e) => {
-                            setNewProductCategory(e.target.value);
-                            const found = categories.find((c) => c.name === e.target.value);
-                            if (found) {
-                              setNewProductShelfLife(found.defaultShelfLifeDays);
-                            }
-                          }}
-                          className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 bg-white font-medium"
-                        >
-                          {categories.map((c) => (
-                            <option key={c.id} value={c.name}>
-                              {c.name} ({c.defaultShelfLifeDays} يوم)
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <input
-                          type="text"
-                          required
-                          value={newProductCategory}
-                          onChange={(e) => setNewProductCategory(e.target.value)}
-                          placeholder="اكتب اسم التصنيف..."
-                          className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 bg-white"
-                        />
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-bold text-slate-700">
+                        الكمية الواردة (بالكرتونة) *
+                      </label>
+                      {selectedPurchaseItem && (
+                        <span className="text-[10px] text-emerald-700 font-bold">
+                          الحد الأقصى: {selectedPurchaseItem.remainingQty}
+                        </span>
                       )}
                     </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        أيام الصلاحية الافتراضية
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        required
-                        value={newProductShelfLife}
-                        onChange={(e) =>
-                          setNewProductShelfLife(parseInt(e.target.value, 10) || 1)
-                        }
-                        className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 bg-white font-bold"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        سعر البيع (ج.م) *
-                      </label>
-                      <input
-                        type="number"
-                        step="0.5"
-                        min="0"
-                        required
-                        value={newProductPrice}
-                        onChange={(e) => setNewProductPrice(parseFloat(e.target.value) || 0)}
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 bg-white font-bold"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        التكلفة (ج.م) *
-                      </label>
-                      <input
-                        type="number"
-                        step="0.5"
-                        min="0"
-                        required
-                        value={newProductCost}
-                        onChange={(e) => setNewProductCost(parseFloat(e.target.value) || 0)}
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 bg-white"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">الوحدة</label>
-                      <input
-                        type="text"
-                        value={newProductUnit}
-                        onChange={(e) => setNewProductUnit(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 bg-white"
-                      />
-                    </div>
+                    <input
+                      type="number"
+                      min="1"
+                      max={selectedPurchaseItem?.remainingQty || 9999}
+                      required
+                      value={batchQuantity}
+                      onChange={(e) => setBatchQuantity(parseInt(e.target.value, 10) || 0)}
+                      className={`w-full px-3.5 py-2.5 rounded-xl border text-sm focus:ring-2 font-bold ${
+                        selectedPurchaseItem && batchQuantity > selectedPurchaseItem.remainingQty
+                          ? 'border-rose-400 focus:ring-rose-500/20 focus:border-rose-600 bg-rose-50/50 text-rose-800'
+                          : 'border-slate-200 focus:ring-emerald-500/20 focus:border-emerald-600'
+                      }`}
+                    />
                   </div>
                 </div>
-              )}
 
-              {/* Batch Specific Fields */}
-              <div className="grid grid-cols-2 gap-3">
+                {/* 5. Production Date */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    رقم التشغيلة (Batch Code)
+                    تاريخ وتوقيت الإنتاج *
                   </label>
                   <input
-                    type="text"
-                    value={batchNumber}
-                    onChange={(e) => setBatchNumber(e.target.value)}
-                    placeholder="مثلاً: BAT-001 (اختياري)"
+                    type="datetime-local"
+                    required
+                    value={productionDate}
+                    onChange={(e) => setProductionDate(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 font-mono"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    الكمية الواردة (بالكرتونة) *
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    required
-                    value={batchQuantity}
-                    onChange={(e) => setBatchQuantity(parseInt(e.target.value, 10) || 0)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 font-bold"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  تاريخ وتوقيت الإنتاج *
-                </label>
-                <input
-                  type="datetime-local"
-                  required
-                  value={productionDate}
-                  onChange={(e) => setProductionDate(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 font-mono"
-                />
-              </div>
-
-              {/* Automatic Expiry Calculation Box */}
-              <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 space-y-1">
-                <div className="font-bold flex items-center gap-1.5 text-emerald-800">
-                  <Sparkles className="w-4 h-4 text-emerald-600" />
-                  <span>الاحتساب التلقائي للصلاحية بنظام FIFO:</span>
-                </div>
-                <div>
-                  مدة الصلاحية المبرمجة للمنتج:{' '}
-                  <strong>
-                    {batchMode === 'new'
-                      ? newProductShelfLife === 1
+                {/* 6. Automatic Expiry Calculation Box */}
+                <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 space-y-1">
+                  <div className="font-bold flex items-center gap-1.5 text-emerald-800">
+                    <Sparkles className="w-4 h-4 text-emerald-600" />
+                    <span>الاحتساب التلقائي للصلاحية بنظام FIFO:</span>
+                  </div>
+                  <div>
+                    مدة الصلاحية المبرمجة للمنتج:{' '}
+                    <strong>
+                      {selectedProduct?.shelfLifeDays === 1
                         ? '24 ساعة (يوم واحد)'
-                        : `${newProductShelfLife} أيام`
-                      : selectedProduct?.shelfLifeDays === 1
-                      ? '24 ساعة (يوم واحد)'
-                      : `${selectedProduct?.shelfLifeDays || 1} أيام`}
-                  </strong>
+                        : `${selectedProduct?.shelfLifeDays || 1} أيام`}
+                    </strong>
+                  </div>
+                  <div className="pt-1 border-t border-emerald-200 font-bold text-emerald-950">
+                    تاريخ الانتهاء المحسوب: {getProjectedExpiry()}
+                  </div>
                 </div>
-                <div className="pt-1 border-t border-emerald-200 font-bold text-emerald-950">
-                  تاريخ الانتهاء المحسوب: {getProjectedExpiry()}
-                </div>
-              </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowBatchModal(false)}
-                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 transition"
-                >
-                  إلغاء
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition disabled:opacity-50"
-                >
-                  {loading
-                    ? 'جاري الحفظ...'
-                    : batchMode === 'new'
-                    ? 'تأكيد وحفظ الصنف والتشغيلة فوراً'
-                    : 'تأكيد وحفظ التشغيلة'}
-                </button>
-              </div>
-            </form>
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowBatchModal(false)}
+                    className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 transition"
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={
+                      loading ||
+                      !selectedPurchaseItem ||
+                      batchQuantity <= 0 ||
+                      batchQuantity > selectedPurchaseItem.remainingQty
+                    }
+                    className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition disabled:opacity-50"
+                  >
+                    {loading ? 'جاري الحفظ...' : 'تأكيد وحفظ التشغيلة بالمخزن (FIFO)'}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

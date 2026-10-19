@@ -8,6 +8,7 @@ export default async function AdminInventoryPage() {
   const products = await dbStore.getProducts();
   const batches = await dbStore.getBatches();
   const categories = await dbStore.getCategories();
+  const availablePurchaseItems = await dbStore.getAvailableSupplierPurchaseItems();
 
   return (
     <div className="space-y-6">
@@ -20,7 +21,12 @@ export default async function AdminInventoryPage() {
         </div>
       </div>
 
-      <InventoryClientView products={products} batches={batches} categories={categories} />
+      <InventoryClientView
+        products={products}
+        batches={batches}
+        categories={categories}
+        availablePurchaseItems={availablePurchaseItems}
+      />
     </div>
   );
 }
