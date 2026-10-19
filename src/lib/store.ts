@@ -23,6 +23,8 @@ import {
   Employee,
   PayrollPayment,
   ProfitLossSummary,
+  TreasurySummary,
+  ComprehensiveProfitLossData,
   RepTarget,
   RepMonthlyPerformance,
 } from '@/types';
@@ -2125,6 +2127,29 @@ class DatabaseStore {
       netMarginPercent,
     };
 
+    // 6. Treasury Cash Balance (رصيد الخزنة الفعلي التراكمي)
+    const supplierPurchases = this.data.supplierPurchases || [];
+    const supplierPayments = this.data.supplierPayments || [];
+    const advances = this.data.advances || [];
+
+    const supplierCashPaid = supplierPurchases.reduce((sum, p) => sum + (Number(p.paidAmount) || 0), 0);
+    const supplierExtraPayments = supplierPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    const totalSupplierOutflow = supplierCashPaid + supplierExtraPayments;
+
+    const totalSalariesOutflow = payrollPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    const totalAdvancesOutflow = advances
+      .filter((a) => a.status === 'approved')
+      .reduce((sum, a) => sum + (Number(a.amount) || 0), 0);
+
+    const totalCashOutflows = totalSupplierOutflow + totalSalariesOutflow + totalAdvancesOutflow;
+    const currentTreasuryBalance = totalCollectedCash - totalCashOutflows;
+
+    const treasury: TreasurySummary = {
+      currentBalance: currentTreasuryBalance,
+      totalInflows: totalCollectedCash,
+      totalOutflows: totalCashOutflows,
+    };
+
     // Product profitability breakdown
     const productBreakdown = Array.from(productSalesMap.entries()).map(([productId, stats]) => {
       const prod = prodMap.get(productId);
@@ -2142,8 +2167,9 @@ class DatabaseStore {
       };
     }).sort((a, b) => b.profit - a.profit);
 
-    return {
+    const comprehensiveData: ComprehensiveProfitLossData = {
       summary,
+      treasury,
       productBreakdown,
       recentPayroll: payrollPayments.slice(0, 10).map((p) => {
         const emp = (this.data.employees || []).find((e) => e.id === p.employeeId);
@@ -2153,7 +2179,17 @@ class DatabaseStore {
           employeeRole: emp?.role || '-',
         };
       }),
+      rawInvoices: invoices,
+      rawCollections: collections,
+      rawPurchases: supplierPurchases,
+      rawPayroll: payrollPayments,
+      rawAdvances: advances,
+      rawReturns: returns,
+      rawBatches: batches,
+      rawProducts: products,
     };
+
+    return comprehensiveData;
   }
 
   // -------------------------------------------------------------

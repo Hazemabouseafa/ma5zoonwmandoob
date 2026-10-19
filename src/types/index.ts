@@ -245,6 +245,36 @@ export interface ProfitLossSummary {
   netMarginPercent: number; // نسبة هامش صافي الربح
 }
 
+export interface TreasurySummary {
+  currentBalance: number; // رصيد الخزنة الفعلي الحالي
+  totalInflows: number; // إجمالي المقبوضات النقدية التراكمية
+  totalOutflows: number; // إجمالي المدفوعات النقدية التراكمية
+}
+
+export interface ComprehensiveProfitLossData {
+  summary: ProfitLossSummary;
+  treasury: TreasurySummary;
+  productBreakdown: {
+    productId: string;
+    productName: string;
+    category: string;
+    unitsSold: number;
+    revenue: number;
+    cost: number;
+    profit: number;
+    marginPercent: number;
+  }[];
+  recentPayroll: (PayrollPayment & { employeeName: string; employeeRole: string })[];
+  rawInvoices: Invoice[];
+  rawCollections: Collection[];
+  rawPurchases: SupplierPurchase[];
+  rawPayroll: PayrollPayment[];
+  rawAdvances: AdvanceRequest[];
+  rawReturns: ReturnItem[];
+  rawBatches: InventoryBatch[];
+  rawProducts: Product[];
+}
+
 // Session User type for JWT & client auth
 export interface SessionUser {
   id: string;
