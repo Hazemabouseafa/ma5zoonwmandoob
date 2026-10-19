@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Client, Invoice } from '@/types';
+import { Client, Invoice, Product } from '@/types';
 import { createInvoiceAction, createClientAction } from '@/lib/actions';
 import {
   UserCheck,
@@ -20,6 +20,8 @@ import {
   ArrowRight,
   Receipt,
   Tag,
+  RotateCcw,
+  Trash2,
 } from 'lucide-react';
 
 interface AvailableProduct {
@@ -32,15 +34,26 @@ interface AvailableProduct {
   earliestHoursRemaining: number;
 }
 
+interface ReturnEntry {
+  productId: string;
+  productName: string;
+  quantity: number;
+  reason: 'expired' | 'damaged';
+  unitPrice: number;
+  notes?: string;
+}
+
 interface Props {
   clients: Client[];
   availableProducts: AvailableProduct[];
+  allProducts: Product[];
   repName: string;
 }
 
 export default function NewInvoiceClientView({
   clients: initialClients,
   availableProducts,
+  allProducts,
   repName,
 }: Props) {
   const router = useRouter();
@@ -54,6 +67,15 @@ export default function NewInvoiceClientView({
   const [paymentType, setPaymentType] = useState<'cash' | 'credit'>('cash');
   const [partialPaid, setPartialPaid] = useState<string>('0');
   const [notes, setNotes] = useState('');
+
+  // Returns in invoice state
+  const [returnItems, setReturnItems] = useState<ReturnEntry[]>([]);
+  const [selectedReturnProductId, setSelectedReturnProductId] = useState<string>(
+    allProducts[0]?.id || ''
+  );
+  const [returnQty, setReturnQty] = useState<string>('1');
+  const [returnReason, setReturnReason] = useState<'expired' | 'damaged'>('expired');
+  const [returnNotes, setReturnNotes] = useState<string>('');
 
   // Modals & Status
   const [showNewClientModal, setShowNewClientModal] = useState(false);
@@ -77,6 +99,50 @@ export default function NewInvoiceClientView({
     });
   };
 
+  const handleAddReturn = () => {
+    const qty = parseInt(returnQty, 10);
+    if (isNaN(qty) || qty <= 0) {
+      alert('يرجى إدخال كمية مرتجع صحيحة (1 أو أكثر)');
+      return;
+    }
+    const prod = allProducts.find((p) => p.id === selectedReturnProductId);
+    if (!prod) {
+      alert('يرجى تحديد الصنف المرتجع');
+      return;
+    }
+
+    const existingIdx = returnItems.findIndex(
+      (r) => r.productId === selectedReturnProductId && r.reason === returnReason
+    );
+
+    if (existingIdx > -1) {
+      setReturnItems((prev) => {
+        const next = [...prev];
+        next[existingIdx].quantity += qty;
+        return next;
+      });
+    } else {
+      setReturnItems((prev) => [
+        ...prev,
+        {
+          productId: prod.id,
+          productName: prod.name,
+          quantity: qty,
+          reason: returnReason,
+          unitPrice: prod.price,
+          notes: returnNotes.trim() || undefined,
+        },
+      ]);
+    }
+
+    setReturnQty('1');
+    setReturnNotes('');
+  };
+
+  const handleRemoveReturn = (idx: number) => {
+    setReturnItems((prev) => prev.filter((_, i) => i !== idx));
+  };
+
   // Calculations
   const cartEntries = Object.entries(cart);
   const subtotal = cartEntries.reduce((sum, [pId, qty]) => {
@@ -84,17 +150,23 @@ export default function NewInvoiceClientView({
     return sum + (prod ? prod.price * qty : 0);
   }, 0);
 
+  const returnsTotal = returnItems.reduce(
+    (sum, item) => sum + item.quantity * item.unitPrice,
+    0
+  );
+
   const numDiscount = Math.max(0, parseFloat(discount) || 0);
-  const totalAmount = Math.max(0, subtotal - numDiscount);
+  const totalAmount = Math.max(0, subtotal - numDiscount - returnsTotal);
   const totalItemsCount = cartEntries.reduce((sum, [, qty]) => sum + qty, 0);
+  const totalReturnsCount = returnItems.reduce((sum, item) => sum + item.quantity, 0);
 
   const handleCheckout = async () => {
     if (!selectedClientId) {
       setErrorMsg('يرجى اختيار العميل');
       return;
     }
-    if (cartEntries.length === 0) {
-      setErrorMsg('يرجى إضافة صنف واحد على الأقل إلى الفاتورة');
+    if (cartEntries.length === 0 && returnItems.length === 0) {
+      setErrorMsg('يرجى إضافة صنف مباع أو صنف مرتجع على الأقل إلى الفاتورة');
       return;
     }
 
@@ -115,6 +187,13 @@ export default function NewInvoiceClientView({
       discount: numDiscount,
       notes: notes.trim() || undefined,
       items,
+      returns: returnItems.map((r) => ({
+        productId: r.productId,
+        quantity: r.quantity,
+        reason: r.reason,
+        unitPrice: r.unitPrice,
+        notes: r.notes,
+      })),
     });
 
     setLoading(false);
@@ -147,14 +226,33 @@ export default function NewInvoiceClientView({
   };
 
   const shareViaWhatsApp = (inv: Invoice) => {
-    const itemsText = inv.items
-      .map((item) => {
-        const p = availableProducts.find((prod) => prod.productId === item.productId);
-        return `• ${p?.name || 'صنف'}: ${item.quantity} كرتونة × ${item.unitPrice} ج.م = ${item.totalPrice} ج.م`;
-      })
-      .join('\n');
+    const itemsText =
+      inv.items.length > 0
+        ? inv.items
+            .map((item) => {
+              const p =
+                availableProducts.find((prod) => prod.productId === item.productId) ||
+                allProducts.find((prod) => prod.id === item.productId);
+              return `• ${p?.name || 'صنف'}: ${item.quantity} كرتونة × ${item.unitPrice} ج.م = ${item.totalPrice} ج.م`;
+            })
+            .join('\n')
+        : '• لا توجد مبيعات جديدة';
 
-    const discountLine = inv.discount && inv.discount > 0 ? `🎁 *الخصم الممنوح*: ${inv.discount} ج.م\n` : '';
+    const returnsText =
+      inv.returnItems && inv.returnItems.length > 0
+        ? `\n━━━━━━━━━━━━━━━━━━\n🔄 *المرتجعات المستلمة (مخصومة)*:\n` +
+          inv.returnItems
+            .map(
+              (ret) =>
+                `• ${ret.productName || 'صنف مرتجع'}: ${ret.quantity} كرتونة (${
+                  ret.reason === 'expired' ? 'منتهي الصلاحية' : 'تالف'
+                }) × ${ret.unitPrice} ج.م = -${ret.totalPrice} ج.م`
+            )
+            .join('\n') +
+          `\n📉 *إجمالي المرتجع*: -${inv.returnsTotal || 0} ج.م\n`
+        : '';
+
+    const discountLine = inv.discount && inv.discount > 0 ? `🎁 *الخصم الممنوح*: -${inv.discount} ج.م\n` : '';
 
     const formattedTime = new Date(inv.createdAt).toLocaleTimeString('ar-EG', {
       hour: '2-digit',
@@ -177,9 +275,9 @@ export default function NewInvoiceClientView({
 ━━━━━━━━━━━━━━━━━━
 الأصناف المباعة:
 ${itemsText}
-━━━━━━━━━━━━━━━━━━
-💵 *المجموع الفرعي*: ${inv.subtotal || inv.totalAmount} ج.م
-${discountLine}💰 *الصافي المطلوب*: ${inv.totalAmount} ج.م
+${returnsText}━━━━━━━━━━━━━━━━━━
+💵 *المجموع الفرعي*: ${inv.subtotal || 0} ج.م
+${discountLine}${inv.returnsTotal && inv.returnsTotal > 0 ? `🔄 *المرتجعات*: -${inv.returnsTotal} ج.م\n` : ''}💰 *الصافي المطلوب*: ${inv.totalAmount} ج.م
 💳 *المدفوع*: ${inv.paidAmount} ج.م (${inv.paymentType === 'cash' ? 'نقدي' : 'آجل'})
 ${inv.totalAmount - inv.paidAmount > 0 ? `⚠️ *المتبقي آجل*: ${inv.totalAmount - inv.paidAmount} ج.م\n` : ''}
 شكراً لتعاملكم معنا! 🥛🥤`;
@@ -319,8 +417,130 @@ ${inv.totalAmount - inv.paidAmount > 0 ? `⚠️ *المتبقي آجل*: ${inv.
         )}
       </div>
 
+      {/* Returns (مرتجعات العميل) Section */}
+      <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-xs space-y-3">
+        <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center">
+              <RotateCcw className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-xs font-bold text-slate-800">
+                تسجيل مرتجعات من العميل (تُخصم فوراً من الفاتورة)
+              </h3>
+              <p className="text-[10px] text-slate-500">
+                استلام أصناف منتهية الصلاحية أو تالفة وخصم قيمتها من إجمالي الحساب
+              </p>
+            </div>
+          </div>
+          {returnItems.length > 0 && (
+            <span className="text-xs font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
+              {totalReturnsCount} كرتونة مرتجع
+            </span>
+          )}
+        </div>
+
+        {/* Input Row */}
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 pt-1">
+          {/* Select Product from allProducts */}
+          <div className="sm:col-span-2">
+            <label className="block text-[11px] font-bold text-slate-600 mb-1">الصنف المرتجع:</label>
+            <select
+              value={selectedReturnProductId}
+              onChange={(e) => setSelectedReturnProductId(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800 bg-white focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500"
+            >
+              {allProducts.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} ({p.price} ج.م / {p.unit})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Qty & Reason */}
+          <div className="grid grid-cols-2 gap-2 sm:col-span-2">
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">الكمية:</label>
+              <input
+                type="number"
+                min="1"
+                value={returnQty}
+                onChange={(e) => setReturnQty(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-black text-center text-slate-900 focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 font-mono"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">السبب:</label>
+              <select
+                value={returnReason}
+                onChange={(e) => setReturnReason(e.target.value as 'expired' | 'damaged')}
+                className="w-full px-2.5 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-800 bg-white focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500"
+              >
+                <option value="expired">منتهي الصلاحية</option>
+                <option value="damaged">تالف / عيب تغليف</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Add Return Button */}
+        <div className="flex justify-end pt-1">
+          <button
+            type="button"
+            onClick={handleAddReturn}
+            className="w-full sm:w-auto px-4 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold border border-rose-200 flex items-center justify-center gap-1.5 transition"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>إضافة المرتجع إلى الفاتورة</span>
+          </button>
+        </div>
+
+        {/* List of return items added */}
+        {returnItems.length > 0 && (
+          <div className="mt-3 space-y-1.5 pt-2 border-t border-slate-100">
+            <span className="text-[11px] font-bold text-slate-700 block">
+              المرتجعات المضافة للفاتورة الحالية:
+            </span>
+            <div className="space-y-1.5">
+              {returnItems.map((ret, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-center justify-between p-2.5 rounded-xl bg-rose-50/70 border border-rose-200/80 text-xs"
+                >
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-900">{ret.productName}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-md font-bold bg-white text-rose-700 border border-rose-200">
+                        {ret.reason === 'expired' ? 'منتهي الصلاحية' : 'تالف'}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-500">
+                      {ret.quantity} كرتونة × {ret.unitPrice} ج.م ={' '}
+                      <strong className="text-rose-700 font-bold">
+                        {(ret.quantity * ret.unitPrice).toLocaleString('ar-EG')} ج.م
+                      </strong>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveReturn(idx)}
+                    className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-100 transition"
+                    title="حذف المرتجع"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Payment Options & Summary */}
-      {totalItemsCount > 0 && (
+      {(totalItemsCount > 0 || returnItems.length > 0) && (
         <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-md space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-slate-100">
             <span className="text-xs font-bold text-slate-600">طريقة الدفع:</span>
@@ -395,7 +615,7 @@ ${inv.totalAmount - inv.paidAmount > 0 ? `⚠️ *المتبقي آجل*: ${inv.
           {/* Total Bar */}
           <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-200 space-y-2">
             <div className="flex items-center justify-between text-xs text-slate-600 pb-2 border-b border-emerald-200/60">
-              <span>المجموع قبل الخصم:</span>
+              <span>المجموع الفرعي (المبيعات):</span>
               <span className="font-bold font-mono">{subtotal.toLocaleString('ar-EG')} ج.م</span>
             </div>
             {numDiscount > 0 && (
@@ -404,10 +624,20 @@ ${inv.totalAmount - inv.paidAmount > 0 ? `⚠️ *المتبقي آجل*: ${inv.
                 <span className="font-mono">-{numDiscount.toLocaleString('ar-EG')} ج.م</span>
               </div>
             )}
+            {returnsTotal > 0 && (
+              <div className="flex items-center justify-between text-xs text-rose-700 font-bold pb-2 border-b border-emerald-200/60">
+                <span className="flex items-center gap-1">
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>خصم المرتجعات ({totalReturnsCount} كرتونة):</span>
+                </span>
+                <span className="font-mono font-bold">-{returnsTotal.toLocaleString('ar-EG')} ج.م</span>
+              </div>
+            )}
             <div className="flex items-center justify-between pt-1">
               <div>
                 <div className="text-xs font-bold text-emerald-800">
-                  إجمالي الأصناف: {totalItemsCount} كرتونة
+                  {totalItemsCount > 0 ? `المبيعات: ${totalItemsCount} كرتونة` : 'لا توجد مبيعات'}
+                  {returnsTotal > 0 && ` | المرتجع: ${totalReturnsCount} كرتونة`}
                 </div>
                 <div className="text-xs text-emerald-600 mt-0.5">
                   {paymentType === 'cash' ? 'دفع نقدي فوري' : 'دفع آجل'}
@@ -540,29 +770,56 @@ ${inv.totalAmount - inv.paidAmount > 0 ? `⚠️ *المتبقي آجل*: ${inv.
                 </div>
               </div>
 
-              <div className="space-y-1 py-1 border-b border-dashed border-slate-300">
-                {createdInvoice.items.map((it) => {
-                  const p = availableProducts.find((x) => x.productId === it.productId);
-                  return (
-                    <div key={it.id} className="flex justify-between">
+              {createdInvoice.items && createdInvoice.items.length > 0 && (
+                <div className="space-y-1 py-1 border-b border-dashed border-slate-300">
+                  {createdInvoice.items.map((it) => {
+                    const p = availableProducts.find((x) => x.productId === it.productId) ||
+                      allProducts.find((x) => x.id === it.productId);
+                    return (
+                      <div key={it.id} className="flex justify-between">
+                        <span>
+                          {p?.name || 'صنف'} × {it.quantity}
+                        </span>
+                        <span>{it.totalPrice} ج.م</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Returned Items in Receipt */}
+              {createdInvoice.returnItems && createdInvoice.returnItems.length > 0 && (
+                <div className="space-y-1 py-1 border-b border-dashed border-slate-300 text-rose-700">
+                  <div className="font-bold text-[10px] text-rose-800 flex justify-between">
+                    <span>المرتجعات المستلمة:</span>
+                    <span>-{createdInvoice.returnsTotal} ج.م</span>
+                  </div>
+                  {createdInvoice.returnItems.map((ret, i) => (
+                    <div key={i} className="flex justify-between text-[10px]">
                       <span>
-                        {p?.name || 'صنف'} × {it.quantity}
+                        • {ret.productName || 'مرتجع'} × {ret.quantity} ({ret.reason === 'expired' ? 'منتهي' : 'تالف'})
                       </span>
-                      <span>{it.totalPrice} ج.م</span>
+                      <span>-{ret.totalPrice} ج.م</span>
                     </div>
-                  );
-                })}
-              </div>
+                  ))}
+                </div>
+              )}
 
               <div className="pt-1 space-y-1">
                 <div className="flex justify-between text-slate-600">
                   <span>المجموع الفرعي:</span>
-                  <span>{createdInvoice.subtotal ?? createdInvoice.totalAmount} ج.م</span>
+                  <span>{createdInvoice.subtotal ?? 0} ج.م</span>
                 </div>
                 {createdInvoice.discount && createdInvoice.discount > 0 ? (
                   <div className="flex justify-between text-amber-600 font-bold">
                     <span>الخصم الممنوح:</span>
                     <span>-{createdInvoice.discount} ج.م</span>
+                  </div>
+                ) : null}
+                {createdInvoice.returnsTotal && createdInvoice.returnsTotal > 0 ? (
+                  <div className="flex justify-between text-rose-600 font-bold">
+                    <span>خصم المرتجعات:</span>
+                    <span>-{createdInvoice.returnsTotal} ج.م</span>
                   </div>
                 ) : null}
                 <div className="flex justify-between font-bold text-slate-900 text-sm border-t border-dashed border-slate-300 pt-1">

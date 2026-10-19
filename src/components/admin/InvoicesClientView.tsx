@@ -18,6 +18,7 @@ import {
   Calendar,
   Layers,
   Sparkles,
+  RotateCcw,
 } from 'lucide-react';
 
 interface ExtendedInvoice extends Invoice {
@@ -183,7 +184,7 @@ export default function InvoicesClientView({ invoices, reps, clients }: Props) {
                   <th className="py-3">المندوب</th>
                   <th className="py-3">المنفذ / العميل</th>
                   <th className="py-3">المجموع قبل الخصم</th>
-                  <th className="py-3">قيمة الخصم</th>
+                  <th className="py-3">الخصم / المرتجع</th>
                   <th className="py-3">الصافي المطلوب</th>
                   <th className="py-3">المدفوع / المتبقي</th>
                   <th className="py-3">طريقة الدفع</th>
@@ -213,14 +214,23 @@ export default function InvoicesClientView({ invoices, reps, clients }: Props) {
                       {(inv.subtotal || inv.totalAmount).toLocaleString('ar-EG')} ج.م
                     </td>
                     <td className="py-3">
-                      {inv.discount && inv.discount > 0 ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-100 text-amber-900 border border-amber-300">
-                          <Percent className="w-3 h-3" />
-                          <span>خصم {inv.discount.toLocaleString('ar-EG')} ج.م</span>
-                        </span>
-                      ) : (
-                        <span className="text-slate-400 text-xs font-mono">-</span>
-                      )}
+                      <div className="flex flex-col gap-1 items-start">
+                        {inv.discount && inv.discount > 0 ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-100 text-amber-900 border border-amber-300">
+                            <Percent className="w-3 h-3" />
+                            <span>خصم {inv.discount.toLocaleString('ar-EG')} ج.م</span>
+                          </span>
+                        ) : null}
+                        {inv.returnsTotal && inv.returnsTotal > 0 ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-rose-50 text-rose-800 border border-rose-200">
+                            <RotateCcw className="w-3 h-3 text-rose-600" />
+                            <span>مرتجع: -{inv.returnsTotal.toLocaleString('ar-EG')} ج.م</span>
+                          </span>
+                        ) : null}
+                        {!inv.discount && !inv.returnsTotal && (
+                          <span className="text-slate-400 text-xs font-mono">-</span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-3 font-mono font-black text-slate-900 text-sm">
                       {inv.totalAmount.toLocaleString('ar-EG')} ج.م
@@ -309,44 +319,95 @@ export default function InvoicesClientView({ invoices, reps, clients }: Props) {
               </button>
             </div>
 
-            {/* Items Table */}
-            <div className="border border-slate-200 rounded-2xl overflow-hidden text-xs">
-              <table className="w-full text-right">
-                <thead className="bg-slate-50 text-slate-500 border-b border-slate-200">
-                  <tr>
-                    <th className="py-2.5 pr-3">اسم المنتج</th>
-                    <th className="py-2.5">الكمية</th>
-                    <th className="py-2.5">سعر الوحدة</th>
-                    <th className="py-2.5 pl-3">الإجمالي</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {activeModalInvoice.itemsWithProducts.map((it) => (
-                    <tr key={it.id}>
-                      <td className="py-2.5 pr-3 font-bold text-slate-800">
-                        {it.product.name}
-                      </td>
-                      <td className="py-2.5 font-mono font-bold text-slate-900">
-                        {it.quantity} كرتونة
-                      </td>
-                      <td className="py-2.5 font-mono text-slate-600">
-                        {it.unitPrice} ج.م
-                      </td>
-                      <td className="py-2.5 pl-3 font-mono font-bold text-slate-900">
-                        {it.totalPrice} ج.م
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            {/* Sold Items Table */}
+            {activeModalInvoice.itemsWithProducts && activeModalInvoice.itemsWithProducts.length > 0 && (
+              <div className="space-y-1.5">
+                <div className="text-xs font-bold text-slate-700">الأصناف المباعة:</div>
+                <div className="border border-slate-200 rounded-2xl overflow-hidden text-xs">
+                  <table className="w-full text-right">
+                    <thead className="bg-slate-50 text-slate-500 border-b border-slate-200">
+                      <tr>
+                        <th className="py-2.5 pr-3">اسم المنتج</th>
+                        <th className="py-2.5">الكمية</th>
+                        <th className="py-2.5">سعر الوحدة</th>
+                        <th className="py-2.5 pl-3">الإجمالي</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {activeModalInvoice.itemsWithProducts.map((it) => (
+                        <tr key={it.id}>
+                          <td className="py-2.5 pr-3 font-bold text-slate-800">
+                            {it.product.name}
+                          </td>
+                          <td className="py-2.5 font-mono font-bold text-slate-900">
+                            {it.quantity} كرتونة
+                          </td>
+                          <td className="py-2.5 font-mono text-slate-600">
+                            {it.unitPrice} ج.م
+                          </td>
+                          <td className="py-2.5 pl-3 font-mono font-bold text-slate-900">
+                            {it.totalPrice} ج.م
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Returned Items Table */}
+            {activeModalInvoice.returnItems && activeModalInvoice.returnItems.length > 0 && (
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-rose-800">
+                  <RotateCcw className="w-3.5 h-3.5 text-rose-600" />
+                  <span>المرتجعات المستلمة والمخصومة من الفاتورة:</span>
+                </div>
+                <div className="border border-rose-200 rounded-2xl overflow-hidden text-xs bg-rose-50/20">
+                  <table className="w-full text-right">
+                    <thead className="bg-rose-100/60 text-rose-800 border-b border-rose-200">
+                      <tr>
+                        <th className="py-2.5 pr-3">الصنف المرتجع</th>
+                        <th className="py-2.5">الكمية</th>
+                        <th className="py-2.5">السبب</th>
+                        <th className="py-2.5">سعر الوحدة</th>
+                        <th className="py-2.5 pl-3">إجمالي الخصم</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-rose-100">
+                      {activeModalInvoice.returnItems.map((ret, idx) => (
+                        <tr key={idx}>
+                          <td className="py-2.5 pr-3 font-bold text-slate-800">
+                            {ret.productName || 'صنف'}
+                          </td>
+                          <td className="py-2.5 font-mono font-bold text-slate-900">
+                            {ret.quantity} كرتونة
+                          </td>
+                          <td className="py-2.5">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-white text-rose-700 border border-rose-200">
+                              {ret.reason === 'expired' ? 'منتهي الصلاحية' : 'تالف'}
+                            </span>
+                          </td>
+                          <td className="py-2.5 font-mono text-slate-600">
+                            {ret.unitPrice} ج.م
+                          </td>
+                          <td className="py-2.5 pl-3 font-mono font-bold text-rose-700">
+                            -{(ret.totalPrice || ret.quantity * ret.unitPrice).toLocaleString('ar-EG')} ج.م
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             {/* Calculations & Discount Box */}
             <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-2">
               <div className="flex justify-between text-slate-600">
-                <span>المجموع قبل الخصم:</span>
+                <span>المجموع الفرعي (المبيعات):</span>
                 <span className="font-mono font-bold">
-                  {(activeModalInvoice.subtotal || activeModalInvoice.totalAmount).toLocaleString('ar-EG')} ج.م
+                  {(activeModalInvoice.subtotal ?? 0).toLocaleString('ar-EG')} ج.م
                 </span>
               </div>
 
@@ -361,6 +422,18 @@ export default function InvoicesClientView({ invoices, reps, clients }: Props) {
                   </span>
                 </div>
               )}
+
+              {activeModalInvoice.returnsTotal && activeModalInvoice.returnsTotal > 0 ? (
+                <div className="flex justify-between text-rose-800 font-bold bg-rose-50 p-2 rounded-xl border border-rose-200">
+                  <span className="flex items-center gap-1">
+                    <RotateCcw className="w-3.5 h-3.5 text-rose-600" />
+                    <span>خصم المرتجعات المستلمة:</span>
+                  </span>
+                  <span className="font-mono font-black text-sm">
+                    - {activeModalInvoice.returnsTotal.toLocaleString('ar-EG')} ج.م
+                  </span>
+                </div>
+              ) : null}
 
               <div className="flex justify-between text-slate-900 font-black text-base pt-1 border-t border-slate-200">
                 <span>الصافي المطلوب:</span>

@@ -5,6 +5,7 @@ import NewInvoiceClientView from '@/components/rep/NewInvoiceClientView';
 export default async function RepNewInvoicePage() {
   const user = await getCurrentUser();
   const clients = await dbStore.getClients();
+  const allProducts = await dbStore.getProducts();
   const rawVanStock = await dbStore.getRepVanStock(user!.id);
 
   // Group van stock by product for simplified POS selection
@@ -56,6 +57,7 @@ export default async function RepNewInvoicePage() {
       <NewInvoiceClientView
         clients={clients}
         availableProducts={availableProducts}
+        allProducts={allProducts}
         repName={user!.name}
       />
     </div>

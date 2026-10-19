@@ -15,6 +15,7 @@ import {
   Category,
   AdvanceRequest,
   AdvanceStatus,
+  InvoiceReturnItem,
 } from '@/types';
 
 interface DatabaseSchema {
@@ -710,7 +711,7 @@ class DatabaseStore {
   }
 
   // -------------------------------------------------------------
-  // INVOICING (فاتورة مبيعات بنظام FIFO الفوري مع دعم الخصم)
+  // INVOICING (فاتورة مبيعات بنظام FIFO الفوري مع دعم الخصم والمرتجعات)
   // -------------------------------------------------------------
   async createInvoice(data: {
     repId: string;
@@ -723,6 +724,13 @@ class DatabaseStore {
       productId: string;
       quantity: number;
     }[];
+    returns?: {
+      productId: string;
+      quantity: number;
+      reason: 'expired' | 'damaged';
+      unitPrice?: number;
+      notes?: string;
+    }[];
   }): Promise<Invoice> {
     return this.transaction((db) => {
       const rep = db.users.find((u) => u.id === data.repId);
@@ -731,8 +739,8 @@ class DatabaseStore {
       const client = db.clients.find((c) => c.id === data.clientId);
       if (!client) throw new Error('العميل أو المنفذ المحدد غير موجود');
 
-      if (!data.items || data.items.length === 0) {
-        throw new Error('يجب إضافة منتج واحد على الأقل في الفاتورة');
+      if ((!data.items || data.items.length === 0) && (!data.returns || data.returns.length === 0)) {
+        throw new Error('يجب إضافة منتج واحد أو مرتجع واحد على الأقل في الفاتورة');
       }
 
       const invoiceId = `inv_${Date.now()}`;
@@ -742,58 +750,100 @@ class DatabaseStore {
       const invoiceItems: InvoiceItem[] = [];
 
       // Process each requested product using FIFO from the rep's vehicle batches
-      for (const reqItem of data.items) {
-        const product = db.products.find((p) => p.id === reqItem.productId);
-        if (!product) throw new Error(`المنتج ${reqItem.productId} غير معرف`);
+      if (data.items && data.items.length > 0) {
+        for (const reqItem of data.items) {
+          const product = db.products.find((p) => p.id === reqItem.productId);
+          if (!product) throw new Error(`المنتج ${reqItem.productId} غير معرف`);
 
-        let neededQty = reqItem.quantity;
-        if (neededQty <= 0) continue;
+          let neededQty = reqItem.quantity;
+          if (neededQty <= 0) continue;
 
-        // Find available batches for this product in rep's van, sorted by earliest expiry (FIFO!)
-        const availableVanBatches = db.repInventory
-          .filter((r) => r.repId === data.repId && r.productId === reqItem.productId && r.quantity > 0)
-          .map((r) => {
-            const batch = db.batches.find((b) => b.id === r.batchId)!;
-            return {
-              repInvItem: r,
-              batch,
-            };
-          })
-          .sort((a, b) => new Date(a.batch.expiryDate).getTime() - new Date(b.batch.expiryDate).getTime());
+          // Find available batches for this product in rep's van, sorted by earliest expiry (FIFO!)
+          const availableVanBatches = db.repInventory
+            .filter((r) => r.repId === data.repId && r.productId === reqItem.productId && r.quantity > 0)
+            .map((r) => {
+              const batch = db.batches.find((b) => b.id === r.batchId)!;
+              return {
+                repInvItem: r,
+                batch,
+              };
+            })
+            .sort((a, b) => new Date(a.batch.expiryDate).getTime() - new Date(b.batch.expiryDate).getTime());
 
-        const totalVanStock = availableVanBatches.reduce((sum, item) => sum + item.repInvItem.quantity, 0);
+          const totalVanStock = availableVanBatches.reduce((sum, item) => sum + item.repInvItem.quantity, 0);
 
-        if (totalVanStock < neededQty) {
-          throw new Error(
-            `الكمية المتاحة في سيارتك من "${product.name}" (${totalVanStock}) لا تكفي للكمية المطلوبة (${neededQty})`
-          );
+          if (totalVanStock < neededQty) {
+            throw new Error(
+              `الكمية المتاحة في سيارتك من "${product.name}" (${totalVanStock}) لا تكفي للكمية المطلوبة (${neededQty})`
+            );
+          }
+
+          // Deduct from batches starting from earliest expiry (FIFO)
+          for (const item of availableVanBatches) {
+            if (neededQty <= 0) break;
+
+            const deductQty = Math.min(item.repInvItem.quantity, neededQty);
+            item.repInvItem.quantity -= deductQty;
+            neededQty -= deductQty;
+
+            const itemTotal = deductQty * product.price;
+            subtotal += itemTotal;
+
+            invoiceItems.push({
+              id: `item_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+              invoiceId,
+              productId: product.id,
+              batchId: item.batch.id,
+              quantity: deductQty,
+              unitPrice: product.price,
+              totalPrice: itemTotal,
+            });
+          }
         }
+      }
 
-        // Deduct from batches starting from earliest expiry (FIFO)
-        for (const item of availableVanBatches) {
-          if (neededQty <= 0) break;
+      // Process Returns in the same invoice transaction
+      let returnsTotal = 0;
+      const invoiceReturnItems: InvoiceReturnItem[] = [];
 
-          const deductQty = Math.min(item.repInvItem.quantity, neededQty);
-          item.repInvItem.quantity -= deductQty;
-          neededQty -= deductQty;
+      if (data.returns && data.returns.length > 0) {
+        if (!db.returns) db.returns = [];
 
-          const itemTotal = deductQty * product.price;
-          subtotal += itemTotal;
+        for (const retItem of data.returns) {
+          if (!retItem.quantity || retItem.quantity <= 0) continue;
 
-          invoiceItems.push({
-            id: `item_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          const prod = db.products.find((p) => p.id === retItem.productId);
+          const unitPrice = retItem.unitPrice !== undefined ? retItem.unitPrice : (prod?.price || 0);
+          const lineTotal = retItem.quantity * unitPrice;
+          returnsTotal += lineTotal;
+
+          // Record in db.returns tied directly to this invoice
+          const newReturn: ReturnItem = {
+            id: `ret_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            repId: data.repId,
+            productId: retItem.productId,
+            quantity: retItem.quantity,
+            reason: retItem.reason || 'expired',
+            notes: retItem.notes || `مرتجع مخصوم من فاتورة ${invoiceNumber}`,
             invoiceId,
-            productId: product.id,
-            batchId: item.batch.id,
-            quantity: deductQty,
-            unitPrice: product.price,
-            totalPrice: itemTotal,
+            createdAt: new Date().toISOString(),
+          };
+          db.returns.unshift(newReturn);
+
+          invoiceReturnItems.push({
+            productId: retItem.productId,
+            productName: prod?.name || 'صنف مرتجع',
+            quantity: retItem.quantity,
+            unitPrice,
+            totalPrice: lineTotal,
+            reason: retItem.reason || 'expired',
+            notes: retItem.notes,
           });
         }
       }
 
       const discount = Math.max(0, data.discount || 0);
-      const totalAmount = Math.max(0, subtotal - discount);
+      const totalAmount = Math.max(0, subtotal - discount - returnsTotal);
 
       const paid = data.paymentType === 'cash' ? totalAmount : (data.paidAmount ?? 0);
       const remainingUnpaid = Math.max(0, totalAmount - paid);
@@ -810,12 +860,14 @@ class DatabaseStore {
         clientId: data.clientId,
         subtotal,
         discount,
+        returnsTotal: returnsTotal > 0 ? returnsTotal : undefined,
         totalAmount,
         paidAmount: paid,
         paymentType: data.paymentType,
         notes: data.notes || '',
         createdAt: new Date().toISOString(),
         items: invoiceItems,
+        returnItems: invoiceReturnItems.length > 0 ? invoiceReturnItems : undefined,
       };
 
       db.invoices.unshift(invoice);

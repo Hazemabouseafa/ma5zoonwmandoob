@@ -80,6 +80,16 @@ export interface InvoiceItem {
   totalPrice: number;
 }
 
+export interface InvoiceReturnItem {
+  productId: string;
+  productName?: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  reason: ReturnReason;
+  notes?: string;
+}
+
 export interface Invoice {
   id: string;
   invoiceNumber: string;
@@ -87,12 +97,14 @@ export interface Invoice {
   clientId: string;
   subtotal: number;
   discount: number;
-  totalAmount: number; // Net total after discount
+  returnsTotal?: number; // Total value of returned items deducted from invoice
+  totalAmount: number; // Net total after discount and returns
   paidAmount: number;
   paymentType: PaymentType;
   notes?: string;
   createdAt: string;
   items: InvoiceItem[];
+  returnItems?: InvoiceReturnItem[];
 }
 
 export interface ReturnItem {

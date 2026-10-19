@@ -378,6 +378,13 @@ export async function createInvoiceAction(data: {
     productId: string;
     quantity: number;
   }[];
+  returns?: {
+    productId: string;
+    quantity: number;
+    reason: 'expired' | 'damaged';
+    unitPrice?: number;
+    notes?: string;
+  }[];
 }) {
   try {
     const user = await getCurrentUser();
@@ -393,10 +400,12 @@ export async function createInvoiceAction(data: {
       discount: data.discount,
       notes: data.notes,
       items: data.items,
+      returns: data.returns,
     });
 
     revalidatePath('/rep');
     revalidatePath('/rep/summary');
+    revalidatePath('/rep/returns');
     revalidatePath('/admin');
     revalidatePath('/admin/invoices');
     revalidatePath('/admin/settlements');
