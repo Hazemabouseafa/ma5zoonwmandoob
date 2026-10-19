@@ -25,6 +25,8 @@ import {
   ChevronRight,
   ChevronLeft,
   Building2,
+  Wallet,
+  TrendingUp,
 } from 'lucide-react';
 
 interface AdminNavProps {
@@ -47,12 +49,14 @@ export default function AdminNav({ userName }: AdminNavProps) {
 
   const navItems = [
     { href: '/admin', label: 'الرقابة الحية والمؤشرات', icon: LayoutDashboard },
+    { href: '/admin/profit-loss', label: 'الأرباح والخسائر (P&L)', icon: TrendingUp },
     { href: '/admin/suppliers', label: 'الموردين وفواتير الشراء', icon: Building2 },
     { href: '/admin/inventory', label: 'المخزن الرئيسي (FIFO)', icon: Boxes },
     { href: '/admin/dispatch', label: 'تحويل عهدة للسيارات', icon: Truck },
     { href: '/admin/invoices', label: 'فواتير المناديب والخصومات', icon: FileText },
     { href: '/admin/clients', label: 'المنافذ والسوبرماركتات', icon: Store },
     { href: '/admin/settlements', label: 'تسويات نهاية اليوم', icon: Scale },
+    { href: '/admin/employees', label: 'الموظفين والمرتبات', icon: Wallet },
     { href: '/admin/advances', label: 'سلف المناديب', icon: HandCoins },
     { href: '/admin/reps', label: 'إدارة المناديب', icon: Users },
     { href: '/admin/analytics', label: 'التحليلات والمبيعات', icon: BarChart3 },

@@ -768,3 +768,170 @@ export async function createSupplierPurchaseAction(data: {
     return { success: false, error: err.message || 'حدث خطأ أثناء تسجيل فاتورة الشراء' };
   }
 }
+
+// ----------------------------------------------------
+// ADMIN: Employee & Payroll Management (شؤون الموظفين والمرتبات)
+// ----------------------------------------------------
+export async function createEmployeeAction(formData: FormData) {
+  try {
+    const user = await getCurrentUser();
+    if (!user || user.role !== 'admin') {
+      return { success: false, error: 'غير مصرح لك بإجراء هذه العملية' };
+    }
+
+    const name = (formData.get('name') as string)?.trim();
+    const phone = (formData.get('phone') as string)?.trim() || '';
+    const role = (formData.get('role') as string)?.trim();
+    const baseSalary = parseFloat(formData.get('baseSalary') as string) || 0;
+
+    if (!name) {
+      return { success: false, error: 'يرجى إدخال اسم الموظف' };
+    }
+
+    if (!role) {
+      return { success: false, error: 'يرجى تحديد المسمى الوظيفي للموظف' };
+    }
+
+    const employee = await dbStore.createEmployee({
+      name,
+      phone,
+      role,
+      baseSalary,
+    });
+
+    revalidatePath('/admin/employees');
+    revalidatePath('/admin/profit-loss');
+    revalidatePath('/admin');
+
+    return {
+      success: true,
+      message: `تمت إضافة الموظف ${employee.name} بنجاح`,
+      employee,
+    };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'فشلت إضافة الموظف' };
+  }
+}
+
+export async function updateEmployeeAction(formData: FormData) {
+  try {
+    const user = await getCurrentUser();
+    if (!user || user.role !== 'admin') {
+      return { success: false, error: 'غير مصرح لك بإجراء هذه العملية' };
+    }
+
+    const id = formData.get('id') as string;
+    const name = (formData.get('name') as string)?.trim();
+    const phone = (formData.get('phone') as string)?.trim() || '';
+    const role = (formData.get('role') as string)?.trim();
+    const baseSalary = parseFloat(formData.get('baseSalary') as string);
+
+    if (!id) {
+      return { success: false, error: 'معرف الموظف غير موجود' };
+    }
+
+    if (!name) {
+      return { success: false, error: 'يرجى إدخال اسم الموظف' };
+    }
+
+    if (!role) {
+      return { success: false, error: 'يرجى تحديد المسمى الوظيفي' };
+    }
+
+    const employee = await dbStore.updateEmployee(id, {
+      name,
+      phone,
+      role,
+      baseSalary: isNaN(baseSalary) ? 0 : baseSalary,
+    });
+
+    revalidatePath('/admin/employees');
+    revalidatePath('/admin/profit-loss');
+    revalidatePath('/admin');
+
+    return {
+      success: true,
+      message: `تم تعديل بيانات الموظف ${employee.name} بنجاح`,
+      employee,
+    };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'فشل تعديل بيانات الموظف' };
+  }
+}
+
+export async function deleteEmployeeAction(id: string) {
+  try {
+    const user = await getCurrentUser();
+    if (!user || user.role !== 'admin') {
+      return { success: false, error: 'غير مصرح لك بإجراء هذه العملية' };
+    }
+
+    if (!id) {
+      return { success: false, error: 'معرف الموظف غير صحيح' };
+    }
+
+    const ok = await dbStore.deleteEmployee(id);
+    if (!ok) {
+      return { success: false, error: 'لم يتم العثور على الموظف أو فشل الحذف' };
+    }
+
+    revalidatePath('/admin/employees');
+    revalidatePath('/admin/profit-loss');
+    revalidatePath('/admin');
+
+    return {
+      success: true,
+      message: 'تم حذف الموظف بنجاح',
+    };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'فشل حذف الموظف' };
+  }
+}
+
+export async function recordPayrollPaymentAction(formData: FormData) {
+  try {
+    const user = await getCurrentUser();
+    if (!user || user.role !== 'admin') {
+      return { success: false, error: 'غير مصرح لك بإجراء هذه العملية' };
+    }
+
+    const employeeId = formData.get('employeeId') as string;
+    const amount = parseFloat(formData.get('amount') as string);
+    const month = (formData.get('month') as string)?.trim();
+    const notes = ((formData.get('notes') as string) || '').trim();
+    const paymentDate = (formData.get('paymentDate') as string) || new Date().toISOString();
+
+    if (!employeeId) {
+      return { success: false, error: 'يرجى اختيار الموظف المستحق للصرف' };
+    }
+
+    if (isNaN(amount) || amount <= 0) {
+      return { success: false, error: 'يرجى إدخال مبلغ صحيح للصرف أكبر من الصفر' };
+    }
+
+    if (!month) {
+      return { success: false, error: 'يرجى تحديد الشهر المستحق للصرف' };
+    }
+
+    const payment = await dbStore.recordPayrollPayment({
+      employeeId,
+      amount,
+      month,
+      paymentDate,
+      notes,
+    });
+
+    revalidatePath('/admin/employees');
+    revalidatePath('/admin/profit-loss');
+    revalidatePath('/admin');
+
+    return {
+      success: true,
+      message: `تم تسجيل صرف راتب/سلفة بمبلغ ${amount} ج.م بنجاح وخصمها من أرباح الشركة`,
+      payment,
+    };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'فشل تسجيل صرف الراتب' };
+  }
+}
+

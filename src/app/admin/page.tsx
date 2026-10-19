@@ -21,6 +21,7 @@ export const revalidate = 0;
 
 export default async function AdminDashboardPage() {
   const analytics = await dbStore.getAnalytics();
+  const profitLoss = await dbStore.getProfitLossEngine();
   const recentInvoices = (await dbStore.getInvoices()).slice(0, 5);
 
   return (
@@ -41,6 +42,13 @@ export default async function AdminDashboardPage() {
 
           <div className="flex flex-wrap items-center gap-2.5">
             <Link
+              href="/admin/profit-loss"
+              className="px-4 py-2.5 bg-emerald-900/80 hover:bg-emerald-950 text-white font-bold rounded-xl text-sm transition border border-emerald-500/30 flex items-center gap-2"
+            >
+              <TrendingUp className="w-4 h-4 text-emerald-300" />
+              <span>الأرباح الصافية P&L</span>
+            </Link>
+            <Link
               href="/admin/dispatch"
               className="px-4 py-2.5 bg-white text-emerald-800 hover:bg-emerald-50 font-bold rounded-xl text-sm transition shadow-sm flex items-center gap-2"
             >
@@ -54,6 +62,82 @@ export default async function AdminDashboardPage() {
               <span>تسوية نهاية اليوم</span>
               <ArrowLeft className="w-4 h-4" />
             </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* Real-Time Net Profit & P&L Engine Card on Admin Dashboard */}
+      <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-3xl p-6 text-white shadow-xl border border-slate-700/60 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="space-y-1">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-bold border border-emerald-500/30">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>محرك الأرباح اللحظي الفوري</span>
+            </div>
+            <h2 className="text-xl sm:text-2xl font-black text-white">
+              صافي أرباح الشركة الحقيقية (Net Profit)
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-300 max-w-xl">
+              محسوب تلقائياً: إجمالي الإيرادات - (تكلفة البضاعة المباعة COGS + مرتبات الموظفين + التوالف + الخصومات)
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+            <div className="text-right">
+              <div className="text-xs font-semibold text-slate-400">صافي الربح النهائي</div>
+              <div className={`text-3xl sm:text-4xl font-black mt-0.5 ${profitLoss.summary.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {profitLoss.summary.netProfit.toLocaleString('ar-EG')} <span className="text-base font-bold text-slate-400">ج.م</span>
+              </div>
+              <div className="text-xs text-slate-300 font-semibold mt-0.5">
+                هامش صافي: <span className="font-bold text-emerald-400">{profitLoss.summary.netMarginPercent.toFixed(1)}%</span>
+              </div>
+            </div>
+
+            <Link
+              href="/admin/profit-loss"
+              className="px-5 py-3 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black rounded-2xl text-xs transition shadow-lg flex items-center gap-2 self-stretch sm:self-auto justify-center"
+            >
+              <span>تفاصيل قائمة الأرباح P&L</span>
+              <ArrowLeft className="w-4 h-4" />
+            </Link>
+          </div>
+        </div>
+
+        {/* 4 Mini Breakdown Metrics Inside Dashboard P&L */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-6 pt-5 border-t border-slate-700/60">
+          <div className="bg-slate-800/80 p-3.5 rounded-2xl border border-slate-700/50">
+            <div className="text-[11px] font-bold text-slate-400">إجمالي الإيرادات</div>
+            <div className="text-base sm:text-lg font-black text-white mt-1">
+              {profitLoss.summary.totalRevenue.toLocaleString('ar-EG')} <span className="text-xs font-normal text-slate-400">ج.م</span>
+            </div>
+            <div className="text-[10px] text-blue-400 mt-0.5">مبيعات صادرة</div>
+          </div>
+
+          <div className="bg-slate-800/80 p-3.5 rounded-2xl border border-slate-700/50">
+            <div className="text-[11px] font-bold text-slate-400">تكلفة البضاعة (COGS)</div>
+            <div className="text-base sm:text-lg font-black text-amber-400 mt-1">
+              {profitLoss.summary.cogs.toLocaleString('ar-EG')} <span className="text-xs font-normal text-slate-400">ج.م</span>
+            </div>
+            <div className="text-[10px] text-amber-300/80">تكلفة توريد الموردين</div>
+          </div>
+
+          <div className="bg-slate-800/80 p-3.5 rounded-2xl border border-slate-700/50">
+            <div className="text-[11px] font-bold text-slate-400">مجمل الربح التجاري</div>
+            <div className="text-base sm:text-lg font-black text-emerald-400 mt-1">
+              {profitLoss.summary.grossProfit.toLocaleString('ar-EG')} <span className="text-xs font-normal text-slate-400">ج.م</span>
+            </div>
+            <div className="text-[10px] text-emerald-300/80">هامش {profitLoss.summary.grossMarginPercent.toFixed(1)}%</div>
+          </div>
+
+          <div className="bg-slate-800/80 p-3.5 rounded-2xl border border-slate-700/50">
+            <div className="text-[11px] font-bold text-slate-400">المصروفات والتوالف</div>
+            <div className="text-base sm:text-lg font-black text-rose-400 mt-1">
+              {profitLoss.summary.totalExpenses.toLocaleString('ar-EG')} <span className="text-xs font-normal text-slate-400">ج.م</span>
+            </div>
+            <div className="text-[10px] text-rose-300/80">
+              مرتبات {profitLoss.summary.totalSalaries.toLocaleString('ar-EG')} + توالف
+            </div>
           </div>
         </div>
       </div>

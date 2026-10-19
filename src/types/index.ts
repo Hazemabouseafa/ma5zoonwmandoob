@@ -204,6 +204,46 @@ export interface SupplierPayment {
   createdAt: string;
 }
 
+// -------------------------------------------------------------
+// EMPLOYEES & PAYROLL (شؤون الموظفين والمرتبات)
+// -------------------------------------------------------------
+export interface Employee {
+  id: string;
+  name: string;
+  phone?: string;
+  role: string; // الوظيفة / الدور
+  baseSalary: number; // الراتب الأساسي الشهري
+  createdAt: string;
+}
+
+export interface PayrollPayment {
+  id: string;
+  employeeId: string;
+  amount: number;
+  month: string; // مثال: "2026-10" أو "أكتوبر 2026"
+  paymentDate: string; // ISO string
+  notes?: string;
+  createdAt: string;
+}
+
+// -------------------------------------------------------------
+// PROFIT & LOSS ENGINE (محرك الأرباح والخسائر)
+// -------------------------------------------------------------
+export interface ProfitLossSummary {
+  totalRevenue: number; // إجمالي قيمة المبيعات الصادرة
+  totalCollectedCash: number; // النقدية المحصلة فعلياً
+  totalPendingCredit: number; // المبيعات الآجلة التي لم تُحصّل بعد
+  cogs: number; // تكلفة البضاعة المباعة (Cost of Goods Sold)
+  grossProfit: number; // مجمل الربح (الإيرادات - التكلفة)
+  grossMarginPercent: number; // نسبة هامش مجمل الربح
+  totalSalaries: number; // إجمالي مرتبات وأجور العاملين
+  totalDiscounts: number; // إجمالي الخصومات الممنوحة للعملاء
+  totalWastageLoss: number; // خسائر توالف البضاعة والمرتجعات
+  totalExpenses: number; // إجمالي المصروفات والخصومات
+  netProfit: number; // صافي الربح الحقيقي النهائي
+  netMarginPercent: number; // نسبة هامش صافي الربح
+}
+
 // Session User type for JWT & client auth
 export interface SessionUser {
   id: string;

@@ -20,6 +20,9 @@ import {
   SupplierPurchase,
   SupplierPurchaseItem,
   SupplierPayment,
+  Employee,
+  PayrollPayment,
+  ProfitLossSummary,
 } from '@/types';
 
 interface DatabaseSchema {
@@ -38,6 +41,8 @@ interface DatabaseSchema {
   supplierPurchases: SupplierPurchase[];
   supplierPurchaseItems: SupplierPurchaseItem[];
   supplierPayments: SupplierPayment[];
+  employees: Employee[];
+  payrollPayments: PayrollPayment[];
 }
 
 function getDbFilePath(): string {
@@ -97,6 +102,8 @@ function getInitialData(): DatabaseSchema {
     supplierPurchases: [],
     supplierPurchaseItems: [],
     supplierPayments: [],
+    employees: [],
+    payrollPayments: [],
   };
 }
 
@@ -252,6 +259,8 @@ class DatabaseStore {
           if (!raw.supplierPurchases || !Array.isArray(raw.supplierPurchases)) raw.supplierPurchases = [];
           if (!raw.supplierPurchaseItems || !Array.isArray(raw.supplierPurchaseItems)) raw.supplierPurchaseItems = [];
           if (!raw.supplierPayments || !Array.isArray(raw.supplierPayments)) raw.supplierPayments = [];
+          if (!raw.employees || !Array.isArray(raw.employees)) raw.employees = [];
+          if (!raw.payrollPayments || !Array.isArray(raw.payrollPayments)) raw.payrollPayments = [];
 
           this.data = raw;
           this.lastRemoteSyncTime = remoteTime;
@@ -363,6 +372,16 @@ class DatabaseStore {
 
         if (!this.data.supplierPayments || !Array.isArray(this.data.supplierPayments)) {
           this.data.supplierPayments = [];
+          this.persistToDisk();
+        }
+
+        if (!this.data.employees || !Array.isArray(this.data.employees)) {
+          this.data.employees = [];
+          this.persistToDisk();
+        }
+
+        if (!this.data.payrollPayments || !Array.isArray(this.data.payrollPayments)) {
+          this.data.payrollPayments = [];
           this.persistToDisk();
         }
       } else {
@@ -1754,6 +1773,260 @@ class DatabaseStore {
         totalAdvancesApproved,
         advancesList: repAdvances,
       },
+    };
+  }
+
+  // -------------------------------------------------------------
+  // EMPLOYEES & PAYROLL MANAGEMENT (شؤون الموظفين والمرتبات)
+  // -------------------------------------------------------------
+  async getEmployees(): Promise<Employee[]> {
+    await this.ensureLoaded();
+    return [...(this.data.employees || [])];
+  }
+
+  async createEmployee(data: {
+    name: string;
+    phone?: string;
+    role: string;
+    baseSalary: number;
+  }): Promise<Employee> {
+    return this.transaction((db) => {
+      if (!db.employees) db.employees = [];
+      const trimmedName = (data.name || '').trim();
+      if (!trimmedName) throw new Error('يرجى إدخال اسم الموظف');
+      const role = (data.role || '').trim();
+      if (!role) throw new Error('يرجى تحديد المسمى الوظيفي للموظف');
+
+      const newEmployee: Employee = {
+        id: `emp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        name: trimmedName,
+        phone: data.phone?.trim() || '',
+        role,
+        baseSalary: Math.max(0, Number(data.baseSalary) || 0),
+        createdAt: new Date().toISOString(),
+      };
+
+      db.employees.unshift(newEmployee);
+      return newEmployee;
+    });
+  }
+
+  async updateEmployee(
+    id: string,
+    updates: Partial<Omit<Employee, 'id' | 'createdAt'>>
+  ): Promise<Employee> {
+    return this.transaction((db) => {
+      if (!db.employees) db.employees = [];
+      const idx = db.employees.findIndex((e) => e.id === id);
+      if (idx === -1) throw new Error('الموظف المحدد غير موجود');
+
+      db.employees[idx] = {
+        ...db.employees[idx],
+        ...updates,
+        baseSalary: updates.baseSalary !== undefined ? Math.max(0, Number(updates.baseSalary) || 0) : db.employees[idx].baseSalary,
+      };
+      return db.employees[idx];
+    });
+  }
+
+  async deleteEmployee(id: string): Promise<boolean> {
+    return this.transaction((db) => {
+      if (!db.employees) db.employees = [];
+      const initialCount = db.employees.length;
+      db.employees = db.employees.filter((e) => e.id !== id);
+      return db.employees.length < initialCount;
+    });
+  }
+
+  async getPayrollPayments(employeeId?: string): Promise<(PayrollPayment & { employeeName: string; employeeRole: string })[]> {
+    await this.ensureLoaded();
+    const payments = this.data.payrollPayments || [];
+    const employees = this.data.employees || [];
+
+    const filtered = employeeId ? payments.filter((p) => p.employeeId === employeeId) : payments;
+
+    return filtered.map((p) => {
+      const emp = employees.find((e) => e.id === p.employeeId);
+      return {
+        ...p,
+        employeeName: emp?.name || 'موظف غير مسجل',
+        employeeRole: emp?.role || '-',
+      };
+    });
+  }
+
+  async recordPayrollPayment(data: {
+    employeeId: string;
+    amount: number;
+    month: string;
+    paymentDate?: string;
+    notes?: string;
+  }): Promise<PayrollPayment> {
+    return this.transaction((db) => {
+      if (!db.employees) db.employees = [];
+      if (!db.payrollPayments) db.payrollPayments = [];
+
+      const emp = db.employees.find((e) => e.id === data.employeeId);
+      if (!emp) throw new Error('الموظف المحدد غير مسجل بالنظام');
+
+      const amount = Number(data.amount);
+      if (isNaN(amount) || amount <= 0) {
+        throw new Error('يرجى إدخال مبلغ سداد / مرتب صحيح أكبر من الصفر');
+      }
+
+      const month = (data.month || '').trim();
+      if (!month) throw new Error('يرجى تحديد الشهر المستحق للصرف');
+
+      const payment: PayrollPayment = {
+        id: `pay_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        employeeId: emp.id,
+        amount,
+        month,
+        paymentDate: data.paymentDate || new Date().toISOString(),
+        notes: data.notes?.trim() || '',
+        createdAt: new Date().toISOString(),
+      };
+
+      db.payrollPayments.unshift(payment);
+      return payment;
+    });
+  }
+
+  // -------------------------------------------------------------
+  // AUTOMATED REAL-TIME PROFIT & LOSS ENGINE (بند الأرباح الصافية)
+  // -------------------------------------------------------------
+  async getProfitLossEngine() {
+    await this.ensureLoaded();
+
+    const invoices = this.data.invoices || [];
+    const products = this.data.products || [];
+    const batches = this.data.batches || [];
+    const returns = this.data.returns || [];
+    const payrollPayments = this.data.payrollPayments || [];
+    const collections = this.data.collections || [];
+
+    // 1. Total Revenue Calculation
+    const totalRevenue = invoices.reduce((sum, inv) => sum + (Number(inv.totalAmount) || 0), 0);
+
+    // Cash collected vs credit
+    const cashFromDirectCashInvoices = invoices
+      .filter((inv) => inv.paymentType === 'cash')
+      .reduce((sum, inv) => sum + (Number(inv.totalAmount) || 0), 0);
+    const cashDownPaymentsOnCredit = invoices
+      .filter((inv) => inv.paymentType === 'credit')
+      .reduce((sum, inv) => sum + (Number(inv.paidAmount) || 0), 0);
+    const cashFromCollections = collections.reduce((sum, col) => sum + (Number(col.amount) || 0), 0);
+    const totalCollectedCash = cashFromDirectCashInvoices + cashDownPaymentsOnCredit + cashFromCollections;
+
+    const totalPendingCredit = Math.max(0, invoices.reduce((sum, inv) => {
+      if (inv.paymentType === 'credit') {
+        const remaining = (inv.totalAmount || 0) - (inv.paidAmount || 0);
+        return sum + Math.max(0, remaining);
+      }
+      return sum;
+    }, 0) - cashFromCollections);
+
+    // 2. Cost of Goods Sold (COGS)
+    const prodMap = new Map<string, Product>();
+    products.forEach((p) => prodMap.set(p.id, p));
+
+    const batchMap = new Map<string, InventoryBatch>();
+    batches.forEach((b) => batchMap.set(b.id, b));
+
+    let cogs = 0;
+    const productSalesMap = new Map<string, { unitsSold: number; revenue: number; cost: number }>();
+
+    for (const inv of invoices) {
+      if (!inv.items || !Array.isArray(inv.items)) continue;
+      for (const item of inv.items) {
+        const prod = prodMap.get(item.productId);
+        const batch = item.batchId ? batchMap.get(item.batchId) : undefined;
+        // Determine unit cost: batch cost -> product cost -> 0
+        const unitCost = batch?.unitCost !== undefined && batch.unitCost > 0 
+          ? batch.unitCost 
+          : (prod?.cost || 0);
+        const lineCost = (Number(item.quantity) || 0) * unitCost;
+        const lineRevenue = Number(item.totalPrice) || ((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0));
+
+        cogs += lineCost;
+
+        const curr = productSalesMap.get(item.productId) || { unitsSold: 0, revenue: 0, cost: 0 };
+        curr.unitsSold += (Number(item.quantity) || 0);
+        curr.revenue += lineRevenue;
+        curr.cost += lineCost;
+        productSalesMap.set(item.productId, curr);
+      }
+    }
+
+    // 3. Gross Profit
+    const grossProfit = totalRevenue - cogs;
+    const grossMarginPercent = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;
+
+    // 4. Operating Expenses & Deductions
+    // A) Total Salaries Paid
+    const totalSalaries = payrollPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+    // B) Total Discounts Granted
+    const totalDiscounts = invoices.reduce((sum, inv) => sum + (Number(inv.discount) || 0), 0);
+
+    // C) Wastage & Returns Losses (Damaged / Expired stock loss)
+    let totalWastageLoss = 0;
+    for (const ret of returns) {
+      const prod = prodMap.get(ret.productId);
+      const batch = ret.batchId ? batchMap.get(ret.batchId) : undefined;
+      const unitCost = batch?.unitCost !== undefined && batch.unitCost > 0 ? batch.unitCost : (prod?.cost || 0);
+      totalWastageLoss += (Number(ret.quantity) || 0) * unitCost;
+    }
+
+    const totalExpenses = totalSalaries + totalDiscounts + totalWastageLoss;
+
+    // 5. Net Profit: Total Revenue - (COGS + Total Salaries + Total Wastage + Total Discounts)
+    const netProfit = grossProfit - totalExpenses;
+    const netMarginPercent = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+
+    const summary: ProfitLossSummary = {
+      totalRevenue,
+      totalCollectedCash,
+      totalPendingCredit,
+      cogs,
+      grossProfit,
+      grossMarginPercent,
+      totalSalaries,
+      totalDiscounts,
+      totalWastageLoss,
+      totalExpenses,
+      netProfit,
+      netMarginPercent,
+    };
+
+    // Product profitability breakdown
+    const productBreakdown = Array.from(productSalesMap.entries()).map(([productId, stats]) => {
+      const prod = prodMap.get(productId);
+      const profit = stats.revenue - stats.cost;
+      const margin = stats.revenue > 0 ? (profit / stats.revenue) * 100 : 0;
+      return {
+        productId,
+        productName: prod?.name || 'صنف غير معروف',
+        category: prod?.category || 'عام',
+        unitsSold: stats.unitsSold,
+        revenue: stats.revenue,
+        cost: stats.cost,
+        profit,
+        marginPercent: margin,
+      };
+    }).sort((a, b) => b.profit - a.profit);
+
+    return {
+      summary,
+      productBreakdown,
+      recentPayroll: payrollPayments.slice(0, 10).map((p) => {
+        const emp = (this.data.employees || []).find((e) => e.id === p.employeeId);
+        return {
+          ...p,
+          employeeName: emp?.name || 'موظف',
+          employeeRole: emp?.role || '-',
+        };
+      }),
     };
   }
 }
