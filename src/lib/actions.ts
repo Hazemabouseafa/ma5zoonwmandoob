@@ -622,3 +622,149 @@ export async function updateAdvanceStatusAction(
     return { success: false, error: err.message || 'فشل تحديث حالة السلفة' };
   }
 }
+
+// ----------------------------------------------------
+// ADMIN: Suppliers & Central Warehouse Purchases (الموردين والمخزن الرئيسي)
+// ----------------------------------------------------
+export async function createSupplierAction(formData: FormData) {
+  try {
+    const user = await getCurrentUser();
+    if (!user || user.role !== 'admin') {
+      return { success: false, error: 'غير مصرح لك بإجراء هذه العملية' };
+    }
+
+    const name = ((formData.get('name') as string) || '').trim();
+    const phone = ((formData.get('phone') as string) || '').trim();
+    const address = ((formData.get('address') as string) || '').trim();
+    const initialDue = parseFloat(formData.get('initialDue') as string) || 0;
+
+    if (!name) {
+      return { success: false, error: 'يرجى إدخال اسم المورد أو الشركة' };
+    }
+
+    const supplier = await dbStore.createSupplier({
+      name,
+      phone,
+      address,
+      initialDue,
+    });
+
+    revalidatePath('/admin/suppliers');
+    revalidatePath('/admin');
+    return { success: true, message: `تم إضافة المورد "${name}" بنجاح`, supplier };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'حدث خطأ أثناء إضافة المورد' };
+  }
+}
+
+export async function updateSupplierAction(
+  supplierId: string,
+  formData: FormData
+) {
+  try {
+    const user = await getCurrentUser();
+    if (!user || user.role !== 'admin') {
+      return { success: false, error: 'غير مصرح لك بإجراء هذه العملية' };
+    }
+
+    const name = ((formData.get('name') as string) || '').trim();
+    const phone = ((formData.get('phone') as string) || '').trim();
+    const address = ((formData.get('address') as string) || '').trim();
+
+    if (!name) {
+      return { success: false, error: 'اسم المورد مطلوب' };
+    }
+
+    const updated = await dbStore.updateSupplier(supplierId, {
+      name,
+      phone,
+      address,
+    });
+
+    revalidatePath('/admin/suppliers');
+    revalidatePath('/admin');
+    return { success: true, message: 'تم تحديث بيانات المورد بنجاح', supplier: updated };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'فشل تحديث بيانات المورد' };
+  }
+}
+
+export async function recordSupplierPaymentAction(formData: FormData) {
+  try {
+    const user = await getCurrentUser();
+    if (!user || user.role !== 'admin') {
+      return { success: false, error: 'غير مصرح لك بإجراء هذه العملية' };
+    }
+
+    const supplierId = formData.get('supplierId') as string;
+    const amount = parseFloat(formData.get('amount') as string);
+    const notes = ((formData.get('notes') as string) || '').trim();
+
+    if (!supplierId) {
+      return { success: false, error: 'يرجى تحديد المورد' };
+    }
+
+    if (isNaN(amount) || amount <= 0) {
+      return { success: false, error: 'يرجى إدخال مبلغ سداد صحيح أكبر من الصفر' };
+    }
+
+    const payment = await dbStore.recordSupplierPayment({
+      supplierId,
+      amount,
+      notes,
+    });
+
+    revalidatePath('/admin/suppliers');
+    revalidatePath('/admin');
+    return {
+      success: true,
+      message: `تم تسجيل سداد مبلغ ${amount} ج.م للمورد وخصمها من الرصيد المستحق بنجاح`,
+      payment,
+    };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'فشل تسجيل الدفعة' };
+  }
+}
+
+export async function createSupplierPurchaseAction(data: {
+  supplierId: string;
+  paymentType: 'cash' | 'credit';
+  paidAmount?: number;
+  notes?: string;
+  items: {
+    productId: string;
+    quantity: number;
+    unitCost: number;
+    productionDate: string;
+  }[];
+}) {
+  try {
+    const user = await getCurrentUser();
+    if (!user || user.role !== 'admin') {
+      return { success: false, error: 'غير مصرح لك بإجراء هذه العملية' };
+    }
+
+    if (!data.supplierId) {
+      return { success: false, error: 'يرجى اختيار المورد أولاً' };
+    }
+
+    if (!data.items || data.items.length === 0) {
+      return { success: false, error: 'يرجى إضافة صنف واحد على الأقل للفاتورة' };
+    }
+
+    const purchase = await dbStore.createSupplierPurchase(data);
+
+    revalidatePath('/admin/suppliers');
+    revalidatePath('/admin/inventory');
+    revalidatePath('/admin/dispatch');
+    revalidatePath('/admin');
+
+    return {
+      success: true,
+      message: `تم تسجيل فاتورة الشراء (${purchase.purchaseNumber}) وإيداع البضاعة بالمخزن الرئيسي بنجاح (FIFO)`,
+      purchase,
+    };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'حدث خطأ أثناء تسجيل فاتورة الشراء' };
+  }
+}

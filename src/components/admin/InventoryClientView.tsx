@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Product, InventoryBatch, Category } from '@/types';
 import {
   createBatchAction,
@@ -23,6 +24,7 @@ import {
   Layers,
   Tags,
   Trash2,
+  Building2,
 } from 'lucide-react';
 
 interface Props {
@@ -399,6 +401,14 @@ export default function InventoryClientView({
             <PackagePlus className="w-4 h-4 text-slate-500" />
             <span>تعريف صنف جديد</span>
           </button>
+
+          <Link
+            href="/admin/suppliers"
+            className="px-3.5 py-2 rounded-xl border border-blue-200 hover:bg-blue-100/70 text-blue-800 text-xs font-bold transition flex items-center gap-1.5 bg-blue-50/70 shadow-xs"
+          >
+            <Building2 className="w-4 h-4 text-blue-600" />
+            <span>توريد من مورد للمخزن</span>
+          </Link>
 
           <button
             onClick={() => setShowBatchModal(true)}

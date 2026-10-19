@@ -16,6 +16,10 @@ import {
   AdvanceRequest,
   AdvanceStatus,
   InvoiceReturnItem,
+  Supplier,
+  SupplierPurchase,
+  SupplierPurchaseItem,
+  SupplierPayment,
 } from '@/types';
 
 interface DatabaseSchema {
@@ -30,6 +34,10 @@ interface DatabaseSchema {
   collections: Collection[];
   settlements: Settlement[];
   advances: AdvanceRequest[];
+  suppliers: Supplier[];
+  supplierPurchases: SupplierPurchase[];
+  supplierPurchaseItems: SupplierPurchaseItem[];
+  supplierPayments: SupplierPayment[];
 }
 
 function getDbFilePath(): string {
@@ -85,6 +93,10 @@ function getInitialData(): DatabaseSchema {
     collections: [],
     settlements: [],
     advances: [],
+    suppliers: [],
+    supplierPurchases: [],
+    supplierPurchaseItems: [],
+    supplierPayments: [],
   };
 }
 
@@ -235,9 +247,11 @@ class DatabaseStore {
           if (!raw.invoices || !Array.isArray(raw.invoices)) raw.invoices = [];
           if (!raw.returns || !Array.isArray(raw.returns)) raw.returns = [];
           if (!raw.collections || !Array.isArray(raw.collections)) raw.collections = [];
-          if (!raw.settlements || !Array.isArray(raw.settlements)) raw.settlements = [];
-          if (!raw.repInventory || !Array.isArray(raw.repInventory)) raw.repInventory = [];
           if (!raw.advances || !Array.isArray(raw.advances)) raw.advances = [];
+          if (!raw.suppliers || !Array.isArray(raw.suppliers)) raw.suppliers = [];
+          if (!raw.supplierPurchases || !Array.isArray(raw.supplierPurchases)) raw.supplierPurchases = [];
+          if (!raw.supplierPurchaseItems || !Array.isArray(raw.supplierPurchaseItems)) raw.supplierPurchaseItems = [];
+          if (!raw.supplierPayments || !Array.isArray(raw.supplierPayments)) raw.supplierPayments = [];
 
           this.data = raw;
           this.lastRemoteSyncTime = remoteTime;
@@ -329,6 +343,26 @@ class DatabaseStore {
 
         if (!this.data.advances || !Array.isArray(this.data.advances)) {
           this.data.advances = [];
+          this.persistToDisk();
+        }
+
+        if (!this.data.suppliers || !Array.isArray(this.data.suppliers)) {
+          this.data.suppliers = [];
+          this.persistToDisk();
+        }
+
+        if (!this.data.supplierPurchases || !Array.isArray(this.data.supplierPurchases)) {
+          this.data.supplierPurchases = [];
+          this.persistToDisk();
+        }
+
+        if (!this.data.supplierPurchaseItems || !Array.isArray(this.data.supplierPurchaseItems)) {
+          this.data.supplierPurchaseItems = [];
+          this.persistToDisk();
+        }
+
+        if (!this.data.supplierPayments || !Array.isArray(this.data.supplierPayments)) {
+          this.data.supplierPayments = [];
           this.persistToDisk();
         }
       } else {
@@ -1344,6 +1378,383 @@ class DatabaseStore {
 
       return db.advances[idx];
     });
+  }
+
+  // -------------------------------------------------------------
+  // SUPPLIERS & PURCHASES (إدارة الموردين وفواتير الشراء)
+  // -------------------------------------------------------------
+  async getSuppliers(): Promise<Supplier[]> {
+    await this.ensureLoaded();
+    return this.data.suppliers || [];
+  }
+
+  async getSupplierById(id: string): Promise<Supplier | null> {
+    await this.ensureLoaded();
+    return (this.data.suppliers || []).find((s) => s.id === id) || null;
+  }
+
+  async createSupplier(data: {
+    name: string;
+    phone?: string;
+    address?: string;
+    initialDue?: number;
+  }): Promise<Supplier> {
+    return this.transaction((db) => {
+      if (!db.suppliers) db.suppliers = [];
+      const trimmedName = (data.name || '').trim();
+      if (!trimmedName) throw new Error('يرجى إدخال اسم المورد أو الشركة الموردة');
+
+      const newSupplier: Supplier = {
+        id: `sup_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        name: trimmedName,
+        phone: data.phone?.trim() || '',
+        address: data.address?.trim() || '',
+        totalDue: Math.max(0, Number(data.initialDue) || 0),
+        createdAt: new Date().toISOString(),
+      };
+
+      db.suppliers.unshift(newSupplier);
+      return newSupplier;
+    });
+  }
+
+  async updateSupplier(
+    id: string,
+    updates: Partial<Omit<Supplier, 'id' | 'createdAt'>>
+  ): Promise<Supplier> {
+    return this.transaction((db) => {
+      if (!db.suppliers) db.suppliers = [];
+      const idx = db.suppliers.findIndex((s) => s.id === id);
+      if (idx === -1) throw new Error('المورد المحدد غير موجود');
+
+      db.suppliers[idx] = {
+        ...db.suppliers[idx],
+        ...updates,
+      };
+      return db.suppliers[idx];
+    });
+  }
+
+  async recordSupplierPayment(data: {
+    supplierId: string;
+    amount: number;
+    notes?: string;
+  }): Promise<SupplierPayment> {
+    return this.transaction((db) => {
+      if (!db.suppliers) db.suppliers = [];
+      if (!db.supplierPayments) db.supplierPayments = [];
+
+      const supplier = db.suppliers.find((s) => s.id === data.supplierId);
+      if (!supplier) throw new Error('المورد المحدد غير موجود');
+
+      const amount = Number(data.amount);
+      if (isNaN(amount) || amount <= 0) {
+        throw new Error('يرجى إدخال مبلغ سداد صحيح أكبر من الصفر');
+      }
+
+      supplier.totalDue = Math.max(0, (supplier.totalDue || 0) - amount);
+
+      const payment: SupplierPayment = {
+        id: `spay_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        supplierId: data.supplierId,
+        amount,
+        notes: data.notes?.trim() || '',
+        createdAt: new Date().toISOString(),
+      };
+
+      db.supplierPayments.unshift(payment);
+      return payment;
+    });
+  }
+
+  async getSupplierPurchases(): Promise<(SupplierPurchase & { supplier: Supplier })[]> {
+    await this.ensureLoaded();
+    const purchases = this.data.supplierPurchases || [];
+    const suppliers = this.data.suppliers || [];
+
+    return purchases.map((p) => ({
+      ...p,
+      supplier: suppliers.find((s) => s.id === p.supplierId) || {
+        id: p.supplierId,
+        name: 'مورد غير مسجل',
+        totalDue: 0,
+        createdAt: '',
+      },
+    }));
+  }
+
+  async createSupplierPurchase(data: {
+    supplierId: string;
+    paymentType: 'cash' | 'credit';
+    paidAmount?: number;
+    notes?: string;
+    items: {
+      productId: string;
+      quantity: number;
+      unitCost: number;
+      productionDate: string;
+    }[];
+  }): Promise<SupplierPurchase> {
+    return this.transaction((db) => {
+      if (!db.suppliers) db.suppliers = [];
+      if (!db.supplierPurchases) db.supplierPurchases = [];
+      if (!db.supplierPurchaseItems) db.supplierPurchaseItems = [];
+      if (!db.batches) db.batches = [];
+
+      const supplier = db.suppliers.find((s) => s.id === data.supplierId);
+      if (!supplier) throw new Error('المورد المحدد غير موجود');
+
+      if (!data.items || data.items.length === 0) {
+        throw new Error('يرجى إضافة صنف واحد على الأقل في فاتورة الشراء');
+      }
+
+      const purchaseId = `pur_${Date.now()}`;
+      const purchaseNumber = `PO-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+      let totalAmount = 0;
+      const purchaseItems: SupplierPurchaseItem[] = [];
+
+      // Process each item and inject directly into Central Main Warehouse batches
+      for (const item of data.items) {
+        const prod = db.products.find((p) => p.id === item.productId);
+        if (!prod) throw new Error(`المنتج ${item.productId} غير موجود`);
+
+        const qty = Number(item.quantity);
+        const cost = Number(item.unitCost);
+        if (isNaN(qty) || qty <= 0) {
+          throw new Error(`يرجى تحديد كمية صحيحة للمنتج ${prod.name}`);
+        }
+        if (isNaN(cost) || cost < 0) {
+          throw new Error(`يرجى تحديد سعر تكلفة صحيح للمنتج ${prod.name}`);
+        }
+
+        const lineTotal = qty * cost;
+        totalAmount += lineTotal;
+
+        const shelfDays = prod.shelfLifeDays || 1;
+        const productionDate = item.productionDate || new Date().toISOString();
+        const expiryDate = calculateExpiry(productionDate, shelfDays);
+        const status = determineBatchStatus(expiryDate, qty);
+
+        const batchNumber = `BAT-SUP-${Date.now().toString().slice(-5)}-${Math.floor(Math.random() * 900 + 100)}`;
+
+        // Create the batch in the Central Warehouse
+        const newBatch: InventoryBatch = {
+          id: `bat_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          productId: prod.id,
+          batchNumber,
+          initialQuantity: qty,
+          quantity: qty,
+          productionDate,
+          expiryDate,
+          status,
+          supplierId: supplier.id,
+          purchaseId,
+          unitCost: cost,
+          createdAt: new Date().toISOString(),
+        };
+        db.batches.push(newBatch);
+
+        // Update product cost in catalog
+        if (cost > 0) {
+          prod.cost = cost;
+        }
+
+        const purchaseItem: SupplierPurchaseItem = {
+          id: `pitem_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          purchaseId,
+          productId: prod.id,
+          productName: prod.name,
+          quantity: qty,
+          unitCost: cost,
+          totalCost: lineTotal,
+          productionDate,
+          expiryDate,
+          batchId: newBatch.id,
+          createdAt: new Date().toISOString(),
+        };
+
+        purchaseItems.push(purchaseItem);
+        db.supplierPurchaseItems.push(purchaseItem);
+      }
+
+      const paid = data.paymentType === 'cash' ? totalAmount : Math.max(0, Number(data.paidAmount) || 0);
+      const remainingDue = Math.max(0, totalAmount - paid);
+
+      // Update supplier dues
+      if (remainingDue > 0) {
+        supplier.totalDue = (supplier.totalDue || 0) + remainingDue;
+      }
+
+      const purchase: SupplierPurchase = {
+        id: purchaseId,
+        purchaseNumber,
+        supplierId: data.supplierId,
+        totalAmount,
+        paidAmount: paid,
+        remainingDue,
+        paymentType: data.paymentType,
+        notes: data.notes?.trim() || '',
+        createdAt: new Date().toISOString(),
+        items: purchaseItems,
+      };
+
+      db.supplierPurchases.unshift(purchase);
+      return purchase;
+    });
+  }
+
+  // -------------------------------------------------------------
+  // REP 360° COMPREHENSIVE PERFORMANCE ANALYTICS
+  // -------------------------------------------------------------
+  async getRep360Analytics(repId: string) {
+    await this.ensureLoaded();
+
+    const rep = (this.data.users || []).find((u) => u.id === repId);
+    if (!rep) throw new Error('المندوب غير مسجل بالنظام');
+
+    const now = new Date().getTime();
+
+    // 1. Invoices & Sales
+    const repInvoices = (this.data.invoices || []).filter((i) => i.repId === repId);
+    const totalSales = repInvoices.reduce((s, i) => s + (i.totalAmount || 0), 0);
+    const totalSubtotal = repInvoices.reduce((s, i) => s + (i.subtotal || i.totalAmount || 0), 0);
+    const totalDiscounts = repInvoices.reduce((s, i) => s + (i.discount || 0), 0);
+    const totalReturnsDeducted = repInvoices.reduce((s, i) => s + (i.returnsTotal || 0), 0);
+
+    const cashSales = repInvoices
+      .filter((i) => i.paymentType === 'cash')
+      .reduce((s, i) => s + i.totalAmount, 0);
+
+    const creditSales = repInvoices
+      .filter((i) => i.paymentType === 'credit')
+      .reduce((s, i) => s + i.totalAmount, 0);
+
+    const cashPaidOnCredit = repInvoices
+      .filter((i) => i.paymentType === 'credit')
+      .reduce((s, i) => s + (i.paidAmount || 0), 0);
+
+    const totalCashGeneratedFromInvoices = cashSales + cashPaidOnCredit;
+
+    // 2. Collections
+    const repCollections = (this.data.collections || []).filter((c) => c.repId === repId);
+    const totalCollected = repCollections.reduce((s, c) => s + (c.amount || 0), 0);
+
+    // 3. Clients in route
+    const allClients = this.data.clients || [];
+    const clientIdsWithInvoices = new Set(repInvoices.map((i) => i.clientId));
+    const repClients = allClients.filter((c) => clientIdsWithInvoices.has(c.id));
+    const totalClientsDebt = repClients.reduce((s, c) => s + (c.creditBalance || 0), 0);
+
+    // 4. Returns & Wastage
+    const repReturns = (this.data.returns || []).filter((r) => r.repId === repId);
+    const totalReturnedItems = repReturns.reduce((s, r) => s + (r.quantity || 0), 0);
+    const expiredReturns = repReturns.filter((r) => r.reason === 'expired');
+    const damagedReturns = repReturns.filter((r) => r.reason === 'damaged');
+    const expiredCount = expiredReturns.reduce((s, r) => s + (r.quantity || 0), 0);
+    const damagedCount = damagedReturns.reduce((s, r) => s + (r.quantity || 0), 0);
+
+    // 5. Current Van Stock
+    const rawVanStock = (this.data.repInventory || []).filter(
+      (r) => r.repId === repId && r.quantity > 0
+    );
+    const vanStockItems = rawVanStock.map((item) => {
+      const product = (this.data.products || []).find((p) => p.id === item.productId)!;
+      const batch = (this.data.batches || []).find((b) => b.id === item.batchId)!;
+      const expTime = batch ? new Date(batch.expiryDate).getTime() : now;
+      const hoursRemaining = Math.round((expTime - now) / (1000 * 60 * 60));
+      return {
+        ...item,
+        product,
+        batch,
+        hoursRemaining,
+      };
+    });
+
+    const totalVanCartons = vanStockItems.reduce((s, i) => s + i.quantity, 0);
+    const totalVanValue = vanStockItems.reduce(
+      (s, i) => s + i.quantity * (i.product?.price || 0),
+      0
+    );
+    const urgentVanStock = vanStockItems.filter((i) => i.hoursRemaining <= 24);
+
+    // 6. Settlements
+    const repSettlements = (this.data.settlements || []).filter((s) => s.repId === repId);
+    const balancedSettlements = repSettlements.filter((s) => s.status === 'balanced').length;
+    const discrepancySettlements = repSettlements.filter((s) => s.status === 'discrepancy').length;
+    const totalCashDifference = repSettlements.reduce((s, item) => s + (item.cashDifference || 0), 0);
+
+    // 7. Advances
+    const repAdvances = (this.data.advances || []).filter((a) => a.repId === repId);
+    const totalAdvancesApproved = repAdvances
+      .filter((a) => a.status === 'approved')
+      .reduce((s, a) => s + a.amount, 0);
+
+    return {
+      rep,
+      sales: {
+        totalSales,
+        totalSubtotal,
+        totalDiscounts,
+        totalReturnsDeducted,
+        cashSales,
+        creditSales,
+        cashPaidOnCredit,
+        totalCashGeneratedFromInvoices,
+        invoicesCount: repInvoices.length,
+        invoices: repInvoices.map((inv) => {
+          const client = allClients.find((c) => c.id === inv.clientId);
+          return {
+            ...inv,
+            clientName: client?.name || 'عميل',
+          };
+        }),
+      },
+      collections: {
+        totalCollected,
+        collectionsCount: repCollections.length,
+        collectionsList: repCollections.map((col) => {
+          const client = allClients.find((c) => c.id === col.clientId);
+          return {
+            ...col,
+            clientName: client?.name || 'عميل',
+          };
+        }),
+        totalClientsDebt,
+        clientsCount: repClients.length,
+        clients: repClients,
+      },
+      returns: {
+        totalReturnedItems,
+        expiredCount,
+        damagedCount,
+        returnsList: repReturns.map((ret) => {
+          const prod = (this.data.products || []).find((p) => p.id === ret.productId);
+          return {
+            ...ret,
+            productName: prod?.name || 'صنف',
+            unitPrice: prod?.price || 0,
+          };
+        }),
+      },
+      vanStock: {
+        totalVanCartons,
+        totalVanValue,
+        items: vanStockItems,
+        urgentCount: urgentVanStock.length,
+      },
+      settlements: {
+        totalSettlements: repSettlements.length,
+        balancedSettlements,
+        discrepancySettlements,
+        totalCashDifference,
+        settlementsList: repSettlements,
+      },
+      advances: {
+        totalAdvancesApproved,
+        advancesList: repAdvances,
+      },
+    };
   }
 }
 

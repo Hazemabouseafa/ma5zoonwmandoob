@@ -49,6 +49,9 @@ export interface InventoryBatch {
   productionDate: string; // ISO string
   expiryDate: string; // ISO string
   status: BatchStatus;
+  supplierId?: string;
+  purchaseId?: string;
+  unitCost?: number;
   createdAt: string;
 }
 
@@ -152,6 +155,53 @@ export interface AdvanceRequest {
   managerNotes?: string;
   createdAt: string;
   updatedAt?: string;
+}
+
+// -------------------------------------------------------------
+// SUPPLIERS & PURCHASES (إدارة الموردين وفواتير الشراء)
+// -------------------------------------------------------------
+export interface Supplier {
+  id: string;
+  name: string;
+  phone?: string;
+  address?: string;
+  totalDue: number; // المستحق للمورد (مديونية الشركة للمورد)
+  createdAt: string;
+}
+
+export interface SupplierPurchaseItem {
+  id: string;
+  purchaseId: string;
+  productId: string;
+  productName?: string;
+  quantity: number;
+  unitCost: number;
+  totalCost: number;
+  productionDate: string;
+  expiryDate: string;
+  batchId?: string;
+  createdAt: string;
+}
+
+export interface SupplierPurchase {
+  id: string;
+  purchaseNumber: string;
+  supplierId: string;
+  totalAmount: number;
+  paidAmount: number;
+  remainingDue: number;
+  paymentType: PaymentType;
+  notes?: string;
+  createdAt: string;
+  items: SupplierPurchaseItem[];
+}
+
+export interface SupplierPayment {
+  id: string;
+  supplierId: string;
+  amount: number;
+  notes?: string;
+  createdAt: string;
 }
 
 // Session User type for JWT & client auth

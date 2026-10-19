@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { User } from '@/types';
 import { createRepAction, toggleRepStatusAction, resetRepPasswordAction } from '@/lib/actions';
 import {
@@ -15,6 +16,7 @@ import {
   Phone,
   MapPin,
   Lock,
+  BarChart3,
 } from 'lucide-react';
 
 interface Props {
@@ -184,27 +186,37 @@ export default function RepsClientView({ reps: initialReps }: Props) {
               </div>
             </div>
 
-            <div className="pt-3 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setResetModalUser(rep)}
-                className="flex-1 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center justify-center gap-1.5"
+            <div className="pt-3 space-y-2">
+              <Link
+                href={`/admin/reps/${rep.id}`}
+                className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition flex items-center justify-center gap-2 shadow-xs"
               >
-                <KeyRound className="w-3.5 h-3.5" />
-                <span>تغيير كلمة السر</span>
-              </button>
+                <BarChart3 className="w-3.5 h-3.5 text-emerald-400" />
+                <span>الملف الشامل ومؤشرات الأداء (360° Analytics)</span>
+              </Link>
 
-              <button
-                type="button"
-                onClick={() => handleToggleStatus(rep)}
-                className={`py-2 px-3 rounded-xl text-xs font-bold transition border ${
-                  rep.isActive
-                    ? 'border-rose-200 text-rose-700 hover:bg-rose-50'
-                    : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
-                }`}
-              >
-                {rep.isActive ? 'تعطيل الحساب' : 'تفعيل الحساب'}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setResetModalUser(rep)}
+                  className="flex-1 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center justify-center gap-1.5"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  <span>تغيير كلمة السر</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleToggleStatus(rep)}
+                  className={`py-2 px-3 rounded-xl text-xs font-bold transition border ${
+                    rep.isActive
+                      ? 'border-rose-200 text-rose-700 hover:bg-rose-50'
+                      : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
+                  }`}
+                >
+                  {rep.isActive ? 'تعطيل الحساب' : 'تفعيل الحساب'}
+                </button>
+              </div>
             </div>
           </div>
         ))}
