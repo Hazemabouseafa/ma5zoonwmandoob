@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { User, Settlement, Product, Invoice, ReturnItem } from '@/types';
-import { saveSettlementAction } from '@/lib/actions';
+import { saveSettlementAction, deleteSettlementAction } from '@/lib/actions';
+import ConfirmDeleteModal from '@/components/admin/ConfirmDeleteModal';
 import {
   Scale,
   CheckCircle2,
@@ -14,6 +15,7 @@ import {
   FileCheck,
   ArrowRight,
   TrendingUp,
+  Trash2,
 } from 'lucide-react';
 
 interface RepSummaryData {
@@ -55,6 +57,10 @@ export default function SettlementClientView({
     null
   );
 
+  // Settlement Deletion State
+  const [deleteTarget, setDeleteTarget] = useState<(Settlement & { rep: User }) | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const numActualCash = parseFloat(actualCash) || 0;
   const expectedCash = repSummary?.expectedCash || 0;
   const difference = numActualCash - expectedCash;
@@ -90,6 +96,28 @@ export default function SettlementClientView({
       setResultMsg({
         type: 'error',
         text: res.error || 'فشل حفظ التسوية',
+      });
+    }
+  };
+
+  const handleDeleteSettlement = async () => {
+    if (!deleteTarget) return;
+
+    setIsDeleting(true);
+    const res = await deleteSettlementAction(deleteTarget.id);
+    setIsDeleting(false);
+
+    if (res.success) {
+      setResultMsg({
+        type: 'success',
+        text: res.message || 'تم حذف سجل التسوية بنجاح',
+      });
+      setDeleteTarget(null);
+      router.refresh();
+    } else {
+      setResultMsg({
+        type: 'error',
+        text: res.error || 'فشل حذف سجل التسوية',
       });
     }
   };
@@ -334,53 +362,97 @@ export default function SettlementClientView({
                 <th className="py-3">الكاش الفعلي المستلم</th>
                 <th className="py-3">الفارق</th>
                 <th className="py-3">الحالة</th>
-                <th className="py-3 pl-4">ملاحظات</th>
+                <th className="py-3">ملاحظات</th>
+                <th className="py-3 pl-4 text-center">الإجراءات</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {pastSettlements.map((s) => (
-                <tr key={s.id} className="hover:bg-slate-50/60 transition">
-                  <td className="py-3 pr-4 font-mono text-xs text-slate-600">
-                    {new Date(s.date).toLocaleDateString('ar-EG', {
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric',
-                    })}
+              {pastSettlements.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-8 text-center text-xs text-slate-400">
+                    لا توجد تسويات سابقة مسجلة حالياً
                   </td>
-                  <td className="py-3 font-semibold text-slate-900">{s.rep.name}</td>
-                  <td className="py-3 font-mono font-bold text-slate-800">
-                    {s.expectedCash.toLocaleString('ar-EG')} ج.م
-                  </td>
-                  <td className="py-3 font-mono font-bold text-emerald-700">
-                    {s.actualCash.toLocaleString('ar-EG')} ج.م
-                  </td>
-                  <td className="py-3 font-mono text-xs">
-                    {s.cashDifference === 0 ? (
-                      <span className="text-emerald-600 font-bold">0 (مطابق)</span>
-                    ) : (
-                      <span className="text-rose-600 font-bold">
-                        {s.cashDifference.toLocaleString('ar-EG')} ج.م
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-3">
-                    <span
-                      className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                        s.status === 'balanced'
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : 'bg-rose-100 text-rose-800'
-                      }`}
-                    >
-                      {s.status === 'balanced' ? 'متزن' : 'يوجد فارق'}
-                    </span>
-                  </td>
-                  <td className="py-3 pl-4 text-xs text-slate-500">{s.notes || '-'}</td>
                 </tr>
-              ))}
+              ) : (
+                pastSettlements.map((s) => (
+                  <tr key={s.id} className="hover:bg-slate-50/60 transition">
+                    <td className="py-3 pr-4 font-mono text-xs text-slate-600">
+                      {new Date(s.date).toLocaleDateString('ar-EG', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                      })}
+                    </td>
+                    <td className="py-3 font-semibold text-slate-900">{s.rep?.name || 'مندوب'}</td>
+                    <td className="py-3 font-mono font-bold text-slate-800">
+                      {(s.expectedCash ?? 0).toLocaleString('ar-EG')} ج.م
+                    </td>
+                    <td className="py-3 font-mono font-bold text-emerald-700">
+                      {(s.actualCash ?? 0).toLocaleString('ar-EG')} ج.م
+                    </td>
+                    <td className="py-3 font-mono text-xs">
+                      {(s.cashDifference ?? 0) === 0 ? (
+                        <span className="text-emerald-600 font-bold">0 (مطابق)</span>
+                      ) : (
+                        <span className="text-rose-600 font-bold">
+                          {(s.cashDifference ?? 0).toLocaleString('ar-EG')} ج.م
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3">
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                          s.status === 'balanced'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-rose-100 text-rose-800'
+                        }`}
+                      >
+                        {s.status === 'balanced' ? 'متزن' : 'يوجد فارق'}
+                      </span>
+                    </td>
+                    <td className="py-3 text-xs text-slate-500">{s.notes || '-'}</td>
+                    <td className="py-3 pl-4 text-center">
+                      <button
+                        type="button"
+                        onClick={() => setDeleteTarget(s)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                        title="حذف سجل التسوية"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Universal Confirm Delete Modal */}
+      <ConfirmDeleteModal
+        isOpen={!!deleteTarget}
+        title="تأكيد حذف سجل التسوية"
+        message={`هل أنت متأكد من حذف تسوية المندوب "${deleteTarget?.rep?.name || 'مندوب'}" المسجلة بتاريخ ${
+          deleteTarget
+            ? new Date(deleteTarget.date).toLocaleDateString('ar-EG', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+              })
+            : ''
+        }؟ هذا الإجراء نهائي ولا يمكن التراجع عنه.`}
+        itemName={
+          deleteTarget
+            ? `تسوية ${deleteTarget.rep?.name || 'مندوب'} - الكاش المستلم: ${(
+                deleteTarget.actualCash ?? 0
+              ).toLocaleString('ar-EG')} ج.م`
+            : undefined
+        }
+        isLoading={isDeleting}
+        onConfirm={handleDeleteSettlement}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

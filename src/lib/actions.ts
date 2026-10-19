@@ -1134,4 +1134,27 @@ export async function deleteAdvanceAction(advanceId: string) {
   }
 }
 
+export async function deleteSettlementAction(settlementId: string) {
+  try {
+    const user = await getCurrentUser();
+    if (!user || user.role !== 'admin') {
+      return { success: false, error: 'غير مصرح لك بإجراء هذه العملية' };
+    }
+
+    if (!settlementId) {
+      return { success: false, error: 'معرف التسوية غير محدد' };
+    }
+
+    await dbStore.deleteSettlement(settlementId);
+
+    revalidatePath('/admin/settlements');
+    revalidatePath('/admin/reps');
+    revalidatePath('/admin');
+
+    return { success: true, message: 'تم حذف سجل التسوية بنجاح' };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'فشل حذف سجل التسوية' };
+  }
+}
+
 

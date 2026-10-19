@@ -1386,11 +1386,12 @@ class DatabaseStore {
 
   async getSettlements(): Promise<(Settlement & { rep: User })[]> {
     await this.ensureLoaded();
-    return this.data.settlements.map((s) => ({
+    const users = this.data.users || [];
+    return (this.data.settlements || []).map((s) => ({
       ...s,
-      rep: this.data.users.find((u) => u.id === s.repId) || {
+      rep: users.find((u) => u.id === s.repId) || {
         id: s.repId,
-        name: 'مندوب',
+        name: 'مندوب غير مسجل',
         username: '',
         password: '',
         role: 'rep',
@@ -1398,6 +1399,16 @@ class DatabaseStore {
         createdAt: '',
       },
     }));
+  }
+
+  async deleteSettlement(id: string): Promise<boolean> {
+    return this.transaction((db) => {
+      if (!db.settlements) db.settlements = [];
+      const settlement = db.settlements.find((s) => s.id === id);
+      if (!settlement) throw new Error('سجل التسوية المراد حذفه غير موجود');
+      db.settlements = db.settlements.filter((s) => s.id !== id);
+      return true;
+    });
   }
 
   // -------------------------------------------------------------

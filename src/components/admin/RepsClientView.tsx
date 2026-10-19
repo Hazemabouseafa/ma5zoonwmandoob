@@ -49,14 +49,16 @@ interface MonthlyPerformanceData {
 interface Props {
   reps: User[];
   initialPerformance?: MonthlyPerformanceData;
+  initialTab?: 'targets' | 'accounts';
 }
 
 export default function RepsClientView({
   reps: initialReps,
   initialPerformance,
+  initialTab = 'targets',
 }: Props) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'targets' | 'accounts'>('targets');
+  const [activeTab, setActiveTab] = useState<'targets' | 'accounts'>(initialTab);
   const [repsList, setRepsList] = useState<User[]>(initialReps || []);
 
   // Performance & Targets state
@@ -91,8 +93,36 @@ export default function RepsClientView({
   useEffect(() => {
     if (initialPerformance) {
       setPerformance(initialPerformance);
+      if (initialPerformance.month) {
+        setSelectedMonth(initialPerformance.month);
+      }
     }
   }, [initialPerformance]);
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
+
+  const currentMonthStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+
+  const getPrevMonth = (m: string) => {
+    const [year, month] = m.split('-').map(Number);
+    const date = new Date(year, month - 2, 1);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  };
+
+  const getNextMonth = (m: string) => {
+    const [year, month] = m.split('-').map(Number);
+    const date = new Date(year, month, 1);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  };
+
+  const handleMonthChange = (newMonth: string) => {
+    setSelectedMonth(newMonth);
+    router.push(`/admin/reps?month=${newMonth}`);
+  };
 
   const handleOpenTargetModal = (repId?: string, currentAmount?: number) => {
     setTargetRepId(repId || repsList[0]?.id || '');
@@ -125,6 +155,10 @@ export default function RepsClientView({
       if (res.success) {
         setMsg({ type: 'success', text: res.message || 'تم حفظ تارجت المندوب بنجاح' });
         setShowTargetModal(false);
+        if (targetMonth !== selectedMonth) {
+          setSelectedMonth(targetMonth);
+        }
+        router.push(`/admin/reps?month=${targetMonth}`);
         router.refresh();
       } else {
         setMsg({ type: 'error', text: res.error || 'فشل حفظ التارجت' });
@@ -297,24 +331,53 @@ export default function RepsClientView({
         <div className="space-y-6">
           {/* Month Selector Bar */}
           <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-slate-500" />
-              <span className="text-sm font-bold text-slate-700">تتبع الأداء لشهر:</span>
+            <div className="flex flex-wrap items-center gap-2.5">
               <div className="flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-slate-500" />
+                <span className="text-sm font-bold text-slate-700">تتبع الأداء لشهر:</span>
                 <input
                   type="month"
                   value={selectedMonth}
-                  onChange={(e) => {
-                    setSelectedMonth(e.target.value);
-                    router.push(`/admin/reps?month=${e.target.value}`);
-                  }}
+                  onChange={(e) => handleMonthChange(e.target.value)}
                   className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                 />
+              </div>
+
+              {/* Quick Navigation Buttons */}
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleMonthChange(getPrevMonth(selectedMonth))}
+                  className="px-2.5 py-1.5 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
+                  title="الانتقال للشهر السابق"
+                >
+                  الشهر السابق
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleMonthChange(currentMonthStr)}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-xl transition ${
+                    selectedMonth === currentMonthStr
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                  }`}
+                  title="الانتقال للشهر الحالي"
+                >
+                  الشهر الحالي
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleMonthChange(getNextMonth(selectedMonth))}
+                  className="px-2.5 py-1.5 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
+                  title="الانتقال للشهر التالي"
+                >
+                  الشهر التالي
+                </button>
               </div>
             </div>
 
             <div className="text-xs text-slate-500">
-              يتم احتساب المبيعات الفعلية تلقائياً من واقع فواتير المبيعات الصادرة لكل مندوب خلال هذا الشهر
+              يتم احتساب المبيعات والتحصيل آلياً بناءً على حركة فواتير وسندات المندوب المسجلة في هذا الشهر
             </div>
           </div>
 
