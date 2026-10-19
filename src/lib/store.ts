@@ -2481,6 +2481,150 @@ class DatabaseStore {
       },
     };
   }
+
+  // -------------------------------------------------------------
+  // SYSTEM BACKUP & SECURE DATA WIPE (النسخ الاحتياطي ومسح البيانات)
+  // -------------------------------------------------------------
+  async getDatabaseStats() {
+    await this.ensureLoaded();
+    return {
+      users: (this.data.users || []).length,
+      categories: (this.data.categories || []).length,
+      products: (this.data.products || []).length,
+      batches: (this.data.batches || []).length,
+      repInventory: (this.data.repInventory || []).length,
+      clients: (this.data.clients || []).length,
+      invoices: (this.data.invoices || []).length,
+      returns: (this.data.returns || []).length,
+      collections: (this.data.collections || []).length,
+      settlements: (this.data.settlements || []).length,
+      advances: (this.data.advances || []).length,
+      suppliers: (this.data.suppliers || []).length,
+      supplierPurchases: (this.data.supplierPurchases || []).length,
+      supplierPayments: (this.data.supplierPayments || []).length,
+      employees: (this.data.employees || []).length,
+      payrollPayments: (this.data.payrollPayments || []).length,
+      repTargets: (this.data.repTargets || []).length,
+    };
+  }
+
+  async getFullBackup() {
+    await this.ensureLoaded();
+    const stats = await this.getDatabaseStats();
+    return {
+      metadata: {
+        appName: 'Al-Waseet B2B Distribution ERP',
+        appNameAr: 'نظام المراعي للتوزيع والتوريدات B2B',
+        systemVersion: '2.0.0',
+        exportDate: new Date().toISOString(),
+        totalEntitiesCount: Object.values(stats).reduce((a, b) => a + b, 0),
+        recordsSummary: stats,
+      },
+      database: {
+        users: (this.data.users || []).map((u) => ({
+          ...u,
+          password: '***', // Mask password in backup export
+        })),
+        categories: this.data.categories || [],
+        products: this.data.products || [],
+        batches: this.data.batches || [],
+        repInventory: this.data.repInventory || [],
+        clients: this.data.clients || [],
+        invoices: this.data.invoices || [],
+        returns: this.data.returns || [],
+        collections: this.data.collections || [],
+        settlements: this.data.settlements || [],
+        advances: this.data.advances || [],
+        suppliers: this.data.suppliers || [],
+        supplierPurchases: this.data.supplierPurchases || [],
+        supplierPurchaseItems: this.data.supplierPurchaseItems || [],
+        supplierPayments: this.data.supplierPayments || [],
+        employees: this.data.employees || [],
+        payrollPayments: this.data.payrollPayments || [],
+        repTargets: this.data.repTargets || [],
+      },
+    };
+  }
+
+  async wipeDatabase(params: {
+    mode: 'all' | 'transactions_only';
+    adminPasswordConfirm: string;
+    adminUsername?: string;
+  }): Promise<{ success: boolean; message: string; mode: string }> {
+    return this.transaction((db) => {
+      // 1. Find Admin user
+      const users = db.users || [];
+      const adminUser =
+        users.find((u) => u.username === (params.adminUsername || 'admin') && u.role === 'admin') ||
+        users.find((u) => u.role === 'admin');
+
+      if (!adminUser) {
+        throw new Error('لم يتم العثور على حساب المدير العام للتحقق من الصلاحيات');
+      }
+
+      // 2. Strict Security Check: Verify Admin Password
+      if (!params.adminPasswordConfirm || params.adminPasswordConfirm.trim() !== adminUser.password.trim()) {
+        throw new Error('كلمة مرور المدير العام غير صحيحة! تم إلغاء العملية فوراً لحماية بيانات النظام.');
+      }
+
+      // 3. Perform the Wipe based on selected mode
+      if (params.mode === 'all') {
+        // Full Factory Reset: Wipe everything except the Admin account
+        db.users = [adminUser];
+        db.categories = [];
+        db.products = [];
+        db.batches = [];
+        db.repInventory = [];
+        db.clients = [];
+        db.invoices = [];
+        db.returns = [];
+        db.collections = [];
+        db.settlements = [];
+        db.advances = [];
+        db.suppliers = [];
+        db.supplierPurchases = [];
+        db.supplierPurchaseItems = [];
+        db.supplierPayments = [];
+        db.employees = [];
+        db.payrollPayments = [];
+        db.repTargets = [];
+
+        return {
+          success: true,
+          mode: 'all',
+          message: 'تمت إعادة ضبط المصنع ومسح كافة بيانات النظام بنجاح، مع الحفاظ التام على حساب وبيانات دخول المدير العام.',
+        };
+      } else {
+        // Transactions Only Reset: Keep master records (categories, products, clients, suppliers, employees, users)
+        // Wipe all operational / inventory / financial records
+        db.batches = [];
+        db.repInventory = [];
+        db.invoices = [];
+        db.returns = [];
+        db.collections = [];
+        db.settlements = [];
+        db.advances = [];
+        db.supplierPurchases = [];
+        db.supplierPurchaseItems = [];
+        db.supplierPayments = [];
+        db.payrollPayments = [];
+        db.repTargets = [];
+
+        // Reset supplier dues
+        if (db.suppliers) {
+          db.suppliers.forEach((s) => {
+            s.totalDue = 0;
+          });
+        }
+
+        return {
+          success: true,
+          mode: 'transactions_only',
+          message: 'تم تصفير ومسح كافة الحركات التشغيلية والمالية والمخزنية بنجاح، مع بقاء بيانات الأصناف والعملاء والموردين والموظفين.',
+        };
+      }
+    });
+  }
 }
 
 export const dbStore = new DatabaseStore();

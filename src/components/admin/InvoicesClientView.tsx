@@ -39,12 +39,17 @@ interface Props {
   clients: Client[];
 }
 
+type InvoicePeriod = 'all' | 'today' | 'week' | 'month' | 'last_month' | 'custom';
+
 export default function InvoicesClientView({ invoices: initialInvoices, reps, clients }: Props) {
   const router = useRouter();
   const [invoicesList, setInvoicesList] = useState<ExtendedInvoice[]>(initialInvoices || []);
   const [selectedRepId, setSelectedRepId] = useState<string>('all');
   const [selectedClientId, setSelectedClientId] = useState<string>('all');
   const [search, setSearch] = useState('');
+  const [period, setPeriod] = useState<InvoicePeriod>('all');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
   const [activeModalInvoice, setActiveModalInvoice] = useState<ExtendedInvoice | null>(null);
 
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
@@ -82,15 +87,54 @@ export default function InvoicesClientView({ invoices: initialInvoices, reps, cl
     }
   };
 
+  // Date bounds helper
+  const now = new Date();
+
   // Filtering
   const filteredInvoices = invoicesList.filter((inv) => {
     if (selectedRepId !== 'all' && inv.repId !== selectedRepId) return false;
     if (selectedClientId !== 'all' && inv.clientId !== selectedClientId) return false;
+
+    // Time / Period Filtering (أسبوعي، شهري، اليوم، الشهر السابق، مخصص)
+    if (period !== 'all' && inv.createdAt) {
+      const invTime = new Date(inv.createdAt).getTime();
+
+      if (period === 'today') {
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).getTime();
+        const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
+        if (invTime < todayStart || invTime > todayEnd) return false;
+      } else if (period === 'week') {
+        // Week starts Saturday in Egyptian/Arab schedule (0=Sun, 6=Sat)
+        const weekStart = new Date(now);
+        const day = weekStart.getDay();
+        const diff = (day + 1) % 7;
+        weekStart.setDate(weekStart.getDate() - diff);
+        weekStart.setHours(0, 0, 0, 0);
+        if (invTime < weekStart.getTime()) return false;
+      } else if (period === 'month') {
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0).getTime();
+        if (invTime < monthStart) return false;
+      } else if (period === 'last_month') {
+        const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0).getTime();
+        const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999).getTime();
+        if (invTime < lastMonthStart || invTime > lastMonthEnd) return false;
+      } else if (period === 'custom') {
+        if (customStartDate) {
+          const start = new Date(customStartDate + 'T00:00:00').getTime();
+          if (invTime < start) return false;
+        }
+        if (customEndDate) {
+          const end = new Date(customEndDate + 'T23:59:59.999').getTime();
+          if (invTime > end) return false;
+        }
+      }
+    }
+
     if (search.trim()) {
       const q = search.toLowerCase();
-      const matchNum = inv.invoiceNumber.toLowerCase().includes(q);
-      const matchClient = inv.client.name.toLowerCase().includes(q);
-      const matchRep = inv.rep.name.toLowerCase().includes(q);
+      const matchNum = inv.invoiceNumber?.toLowerCase().includes(q);
+      const matchClient = inv.client?.name?.toLowerCase().includes(q);
+      const matchRep = inv.rep?.name?.toLowerCase().includes(q);
       return matchNum || matchClient || matchRep;
     }
     return true;
@@ -155,6 +199,107 @@ export default function InvoicesClientView({ invoices: initialInvoices, reps, cl
           </div>
         </div>
       </div>
+
+      {/* Time Filter Bar (أشرطة الفلترة الزمنية للفواتير: أسبوعي / شهري / اليوم / مخصص) */}
+      <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Calendar className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span className="text-xs font-black text-slate-800">تصفية الفواتير حسب الفترة:</span>
+        </div>
+
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none touch-pan-x">
+          <button
+            onClick={() => setPeriod('all')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap active:scale-95 ${
+              period === 'all'
+                ? 'bg-emerald-600 text-white shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200/70'
+            }`}
+          >
+            جميع الفترات
+          </button>
+          <button
+            onClick={() => setPeriod('today')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap active:scale-95 ${
+              period === 'today'
+                ? 'bg-emerald-600 text-white shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200/70'
+            }`}
+          >
+            اليوم
+          </button>
+          <button
+            onClick={() => setPeriod('week')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap active:scale-95 ${
+              period === 'week'
+                ? 'bg-emerald-600 text-white shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200/70'
+            }`}
+          >
+            هذا الأسبوع
+          </button>
+          <button
+            onClick={() => setPeriod('month')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap active:scale-95 ${
+              period === 'month'
+                ? 'bg-emerald-600 text-white shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200/70'
+            }`}
+          >
+            هذا الشهر
+          </button>
+          <button
+            onClick={() => setPeriod('last_month')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap active:scale-95 ${
+              period === 'last_month'
+                ? 'bg-emerald-600 text-white shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200/70'
+            }`}
+          >
+            الشهر السابق
+          </button>
+          <button
+            onClick={() => setPeriod('custom')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap active:scale-95 ${
+              period === 'custom'
+                ? 'bg-emerald-600 text-white shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200/70'
+            }`}
+          >
+            نطاق مخصص
+          </button>
+        </div>
+      </div>
+
+      {period === 'custom' && (
+        <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 flex flex-wrap items-center gap-3 text-xs animate-fadeIn">
+          <span className="font-bold text-slate-700">تحديد الفترة من:</span>
+          <input
+            type="date"
+            value={customStartDate}
+            onChange={(e) => setCustomStartDate(e.target.value)}
+            className="px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-mono bg-white"
+          />
+          <span className="font-bold text-slate-700">إلى:</span>
+          <input
+            type="date"
+            value={customEndDate}
+            onChange={(e) => setCustomEndDate(e.target.value)}
+            className="px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-mono bg-white"
+          />
+          {(customStartDate || customEndDate) && (
+            <button
+              onClick={() => {
+                setCustomStartDate('');
+                setCustomEndDate('');
+              }}
+              className="text-xs text-rose-600 hover:underline font-bold px-2 py-1"
+            >
+              مسح التواريخ
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Filter Toolbar */}
       <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs grid grid-cols-1 sm:grid-cols-3 gap-3">

@@ -1159,4 +1159,75 @@ export async function deleteSettlementAction(settlementId: string) {
   }
 }
 
+// ----------------------------------------------------
+// ADMIN: System Backup & Secure Database Wipe (النسخ الاحتياطي ومسح البيانات)
+// ----------------------------------------------------
+export async function wipeDatabaseAction(formData: FormData) {
+  try {
+    const user = await getCurrentUser();
+    if (!user || user.role !== 'admin') {
+      return { success: false, error: 'غير مصرح لك بإجراء هذه العملية الحساسة' };
+    }
+
+    const password = (formData.get('password') as string) || '';
+    const mode = ((formData.get('mode') as string) || 'transactions_only') as 'all' | 'transactions_only';
+
+    if (!password) {
+      return { success: false, error: 'يرجى إدخال كلمة مرور المدير العام الحالية لتأكيد الإجراء' };
+    }
+
+    const res = await dbStore.wipeDatabase({
+      mode,
+      adminPasswordConfirm: password,
+      adminUsername: user.username,
+    });
+
+    // Revalidate all operational pages
+    const paths = [
+      '/',
+      '/admin',
+      '/admin/invoices',
+      '/admin/inventory',
+      '/admin/dispatch',
+      '/admin/suppliers',
+      '/admin/profit-loss',
+      '/admin/clients',
+      '/admin/reps',
+      '/admin/settlements',
+      '/admin/advances',
+      '/admin/employees',
+      '/admin/analytics',
+      '/admin/settings',
+    ];
+
+    paths.forEach((p) => {
+      try {
+        revalidatePath(p);
+      } catch {}
+    });
+
+    return {
+      success: true,
+      message: res.message,
+      mode: res.mode,
+    };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'حدث خطأ أثناء تنفيذ عملية مسح البيانات' };
+  }
+}
+
+export async function getDatabaseStatsAction() {
+  try {
+    const user = await getCurrentUser();
+    if (!user || user.role !== 'admin') {
+      return { success: false, error: 'غير مصرح لك بعرض هذه البيانات' };
+    }
+
+    const stats = await dbStore.getDatabaseStats();
+    return { success: true, stats };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'فشل جلب إحصائيات النظام' };
+  }
+}
+
 

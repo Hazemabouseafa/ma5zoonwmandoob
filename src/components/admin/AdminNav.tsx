@@ -27,6 +27,7 @@ import {
   Building2,
   Wallet,
   TrendingUp,
+  Settings,
 } from 'lucide-react';
 
 interface AdminNavProps {
@@ -60,6 +61,7 @@ export default function AdminNav({ userName }: AdminNavProps) {
     { href: '/admin/advances', label: 'سلف المناديب', icon: HandCoins },
     { href: '/admin/reps', label: 'إدارة المناديب', icon: Users },
     { href: '/admin/analytics', label: 'التحليلات والمبيعات', icon: BarChart3 },
+    { href: '/admin/settings', label: 'إعدادات النظام والنسخ الاحتياطي', icon: Settings },
   ];
 
   const handleLogout = async () => {
@@ -144,6 +146,20 @@ export default function AdminNav({ userName }: AdminNavProps) {
                 <div className="text-[10px] text-emerald-600 font-medium">المدير العام</div>
               </div>
             </div>
+
+            {/* Settings & Backup Button */}
+            <Link
+              href="/admin/settings"
+              title="إعدادات النظام والنسخ الاحتياطي"
+              className={`px-2.5 py-1.5 rounded-xl border transition flex items-center gap-1.5 text-xs font-bold shadow-2xs ${
+                pathname === '/admin/settings'
+                  ? 'bg-emerald-600 text-white border-emerald-600'
+                  : 'text-slate-700 hover:text-emerald-700 hover:bg-emerald-50 bg-slate-50 border-slate-200'
+              }`}
+            >
+              <Settings className={`w-3.5 h-3.5 ${pathname === '/admin/settings' ? 'text-white' : 'text-slate-600'}`} />
+              <span className="hidden md:inline">الإعدادات والنسخ</span>
+            </Link>
 
             {/* Change Password Button */}
             <button
