@@ -2,25 +2,37 @@ import { dbStore } from '@/lib/store';
 import DispatchClientView from '@/components/admin/DispatchClientView';
 
 interface Props {
-  searchParams: Promise<{ repId?: string; batchId?: string }>;
+  searchParams?: Promise<{ repId?: string; batchId?: string }>;
 }
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export default async function AdminDispatchPage({ searchParams }: Props) {
-  const { repId, batchId } = await searchParams;
-  const reps = (await dbStore.getUsers()).filter((u) => u.role === 'rep' && u.isActive);
-  const batches = (await dbStore.getBatches()).filter((b) => b.quantity > 0);
+  let repId: string | undefined;
+  let batchId: string | undefined;
 
-  // Get van stock for each rep
+  try {
+    const resolved = searchParams ? await searchParams : {};
+    repId = resolved?.repId;
+    batchId = resolved?.batchId;
+  } catch (err) {
+    console.error('Error resolving searchParams on dispatch page:', err);
+  }
+
+  const allUsers = (await dbStore.getUsers().catch(() => [])) || [];
+  const reps = allUsers.filter((u) => u.role === 'rep' && u.isActive);
+  const allBatches = (await dbStore.getBatches().catch(() => [])) || [];
+  const batches = allBatches.filter((b) => b && b.quantity > 0 && b.product);
+
+  // Get van stock for each rep safely
   const repVanStocks = await Promise.all(
     reps.map(async (rep) => {
-      const stock = await dbStore.getRepVanStock(rep.id);
+      const stock = (await dbStore.getRepVanStock(rep.id).catch(() => [])) || [];
       return {
         rep,
         stock,
-        totalUnits: stock.reduce((s, i) => s + i.quantity, 0),
+        totalUnits: stock.reduce((s, i) => s + (i.quantity || 0), 0),
       };
     })
   );

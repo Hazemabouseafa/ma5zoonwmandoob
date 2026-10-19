@@ -587,18 +587,22 @@ class DatabaseStore {
   async getBatches(): Promise<(InventoryBatch & { product: Product; hoursRemaining: number })[]> {
     await this.ensureLoaded();
     const now = new Date().getTime();
-    return this.data.batches.map((b) => {
-      const prod = this.data.products.find((p) => p.id === b.productId)!;
-      const expTime = new Date(b.expiryDate).getTime();
-      const hoursRemaining = Math.round((expTime - now) / (1000 * 60 * 60));
-      const status = determineBatchStatus(b.expiryDate, b.quantity);
-      return {
-        ...b,
-        status,
-        product: prod,
-        hoursRemaining,
-      };
-    });
+    const products = this.data.products || [];
+    return (this.data.batches || [])
+      .map((b) => {
+        const prod = products.find((p) => p.id === b.productId);
+        if (!prod) return null;
+        const expTime = new Date(b.expiryDate).getTime();
+        const hoursRemaining = Math.round((expTime - now) / (1000 * 60 * 60));
+        const status = determineBatchStatus(b.expiryDate, b.quantity);
+        return {
+          ...b,
+          status,
+          product: prod,
+          hoursRemaining,
+        };
+      })
+      .filter((b): b is NonNullable<typeof b> => b !== null);
   }
 
   async getAvailableSupplierPurchaseItems() {
@@ -755,6 +759,9 @@ class DatabaseStore {
       if (db.batches) {
         db.batches = db.batches.filter((b) => b.productId !== id);
       }
+      if (db.repInventory) {
+        db.repInventory = db.repInventory.filter((r) => r.productId !== id);
+      }
       return true;
     });
   }
@@ -765,6 +772,9 @@ class DatabaseStore {
       const batch = db.batches.find((b) => b.id === id);
       if (!batch) throw new Error('التشغيلة المراد حذفها غير موجودة');
       db.batches = db.batches.filter((b) => b.id !== id);
+      if (db.repInventory) {
+        db.repInventory = db.repInventory.filter((r) => r.batchId !== id);
+      }
       return true;
     });
   }
@@ -781,12 +791,16 @@ class DatabaseStore {
   > {
     await this.ensureLoaded();
     const now = new Date().getTime();
-    const items = this.data.repInventory.filter((r) => r.repId === repId && r.quantity > 0);
+    const products = this.data.products || [];
+    const batches = this.data.batches || [];
+    const items = (this.data.repInventory || []).filter((r) => r.repId === repId && r.quantity > 0);
 
     return items
       .map((item) => {
-        const product = this.data.products.find((p) => p.id === item.productId)!;
-        const batch = this.data.batches.find((b) => b.id === item.batchId)!;
+        const product = products.find((p) => p.id === item.productId);
+        const batch = batches.find((b) => b.id === item.batchId);
+        if (!product || !batch) return null;
+
         const expTime = new Date(batch.expiryDate).getTime();
         const hoursRemaining = Math.round((expTime - now) / (1000 * 60 * 60));
 
@@ -797,6 +811,7 @@ class DatabaseStore {
           hoursRemaining,
         };
       })
+      .filter((item): item is NonNullable<typeof item> => item !== null)
       .sort((a, b) => new Date(a.batch.expiryDate).getTime() - new Date(b.batch.expiryDate).getTime());
   }
 
@@ -1295,16 +1310,23 @@ class DatabaseStore {
     const expectedCash = todayCashFromSales + todayCreditPartialCash + todayCollections;
 
     // Remaining stock in vehicle
-    const vanStockItems = this.data.repInventory.filter((r) => r.repId === repId && r.quantity > 0);
+    const vanStockItems = (this.data.repInventory || []).filter((r) => r.repId === repId && r.quantity > 0);
     const stockMap = new Map<string, number>();
     vanStockItems.forEach((item) => {
       stockMap.set(item.productId, (stockMap.get(item.productId) || 0) + item.quantity);
     });
 
-    const currentVanStock = Array.from(stockMap.entries()).map(([productId, quantity]) => ({
-      product: this.data.products.find((p) => p.id === productId)!,
-      quantity,
-    }));
+    const products = this.data.products || [];
+    const currentVanStock = Array.from(stockMap.entries())
+      .map(([productId, quantity]) => {
+        const prod = products.find((p) => p.id === productId);
+        if (!prod) return null;
+        return {
+          product: prod,
+          quantity,
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null);
 
     const todayReturns = this.data.returns.filter(
       (ret) => ret.repId === repId && ret.createdAt.startsWith(targetDate)

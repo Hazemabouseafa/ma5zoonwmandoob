@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { User, Product, InventoryBatch, RepInventory } from '@/types';
 import { dispatchStockAction } from '@/lib/actions';
 import {
@@ -13,6 +14,8 @@ import {
   Layers,
   Clock,
   Sparkles,
+  UserPlus,
+  Boxes,
 } from 'lucide-react';
 
 interface RepVanData {
@@ -69,8 +72,62 @@ export default function DispatchClientView({
     }
   };
 
+  const hasReps = reps && reps.length > 0;
+  const hasBatches = batches && batches.length > 0;
+
   return (
     <div className="space-y-6">
+      {/* Notice cards if reps or batches are missing */}
+      {!hasReps && (
+        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
+            <div>
+              <h4 className="text-sm font-bold">لا يوجد مناديب متاحين حالياً</h4>
+              <p className="text-xs text-amber-700">
+                يجب تسجيل مندوب مبيعات وتفعيله قبل أن تتمكن من تحويل عهدة بضاعة للسيارات.
+              </p>
+            </div>
+          </div>
+          <Link
+            href="/admin/reps"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl transition shadow-xs w-fit"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>إضافة وتفعيل مناديب</span>
+          </Link>
+        </div>
+      )}
+
+      {!hasBatches && (
+        <div className="p-4 rounded-2xl bg-blue-50 border border-blue-200 text-blue-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <Package className="w-5 h-5 text-blue-600 shrink-0" />
+            <div>
+              <h4 className="text-sm font-bold">المستودع الرئيسي فارغ حالياً</h4>
+              <p className="text-xs text-blue-700">
+                لا توجد تشغيلات بضاعة برصيد موجب بالمستودع لتحويلها. يمكنك تسجيل فواتير شراء أو تشغيلات جديدة.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/admin/suppliers"
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition shadow-xs"
+            >
+              <Boxes className="w-4 h-4" />
+              <span>فواتير الشراء</span>
+            </Link>
+            <Link
+              href="/admin/inventory"
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl transition shadow-xs"
+            >
+              <span>المخزون والتشغيلات</span>
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* Transfer Form Card */}
       <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs">
         <div className="flex items-center gap-3 pb-4 border-b border-slate-100 mb-6">
@@ -96,9 +153,9 @@ export default function DispatchClientView({
             }`}
           >
             {status.type === 'success' ? (
-              <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
             ) : (
-              <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0" />
+              <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
             )}
             <span>{status.message}</span>
           </div>
@@ -113,9 +170,11 @@ export default function DispatchClientView({
               </label>
               <select
                 value={selectedRepId}
+                disabled={!hasReps}
                 onChange={(e) => setSelectedRepId(e.target.value)}
-                className="w-full px-3.5 py-3 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 bg-white font-semibold text-slate-800"
+                className="w-full px-3.5 py-3 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 bg-white font-semibold text-slate-800 disabled:bg-slate-100 disabled:text-slate-400"
               >
+                {!hasReps && <option value="">لا يوجد مناديب مسجلين</option>}
                 {reps.map((rep) => (
                   <option key={rep.id} value={rep.id}>
                     {rep.name} - ({rep.assignedRoute || 'بدون خط سير'})
@@ -131,12 +190,14 @@ export default function DispatchClientView({
               </label>
               <select
                 value={selectedBatchId}
+                disabled={!hasBatches}
                 onChange={(e) => setSelectedBatchId(e.target.value)}
-                className="w-full px-3.5 py-3 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 bg-white text-slate-800"
+                className="w-full px-3.5 py-3 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 bg-white text-slate-800 disabled:bg-slate-100 disabled:text-slate-400"
               >
+                {!hasBatches && <option value="">لا توجد بضاعة متاحة بالمستودع</option>}
                 {batches.map((b) => (
                   <option key={b.id} value={b.id}>
-                    {b.product.name} (تشغيلة: {b.batchNumber}) - متاح: {b.quantity} كرتونة
+                    {b.product?.name || 'صنف'} (تشغيلة: {b.batchNumber}) - متاح: {b.quantity} كرتونة
                   </option>
                 ))}
               </select>
@@ -153,14 +214,16 @@ export default function DispatchClientView({
                   min="1"
                   max={selectedBatch?.quantity || 100}
                   required
+                  disabled={!hasBatches || !hasReps}
                   value={quantity}
                   onChange={(e) => setQuantity(parseInt(e.target.value, 10) || 1)}
-                  className="w-full px-3.5 py-3 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 font-bold text-slate-900"
+                  className="w-full px-3.5 py-3 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 font-bold text-slate-900 disabled:bg-slate-100"
                 />
                 <button
                   type="button"
+                  disabled={!selectedBatch || (selectedBatch.quantity || 0) <= 0}
                   onClick={() => setQuantity(selectedBatch?.quantity || 1)}
-                  className="px-3 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold whitespace-nowrap transition"
+                  className="px-3 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold whitespace-nowrap transition disabled:opacity-40"
                 >
                   الكل ({selectedBatch?.quantity || 0})
                 </button>
@@ -174,7 +237,7 @@ export default function DispatchClientView({
               <div>
                 <span className="text-slate-500 block">الصنف المختار:</span>
                 <strong className="text-slate-900 font-bold text-sm">
-                  {selectedBatch.product.name}
+                  {selectedBatch.product?.name || 'صنف غير محدد'}
                 </strong>
               </div>
               <div>
@@ -186,21 +249,25 @@ export default function DispatchClientView({
               <div>
                 <span className="text-slate-500 block">سعر الكرتونة للبيع:</span>
                 <strong className="text-slate-900 font-bold text-sm">
-                  {selectedBatch.product.price} ج.م
+                  {selectedBatch.product?.price ?? 0} ج.م
                 </strong>
               </div>
               <div>
                 <span className="text-slate-500 block">تاريخ الانتهاء:</span>
                 <strong
                   className={`font-mono font-bold text-sm ${
-                    selectedBatch.hoursRemaining <= 24 ? 'text-rose-600' : 'text-slate-900'
+                    (selectedBatch.hoursRemaining ?? 0) <= 24 ? 'text-rose-600' : 'text-slate-900'
                   }`}
                 >
-                  {new Date(selectedBatch.expiryDate).toLocaleDateString('ar-EG', {
-                    month: 'numeric',
-                    day: 'numeric',
-                  })}{' '}
-                  (متبقي {selectedBatch.hoursRemaining} س)
+                  {selectedBatch.expiryDate
+                    ? new Date(selectedBatch.expiryDate).toLocaleDateString('ar-EG', {
+                        month: 'numeric',
+                        day: 'numeric',
+                      })
+                    : '-'}
+                  {selectedBatch.hoursRemaining !== undefined && (
+                    <> (متبقي {selectedBatch.hoursRemaining} س)</>
+                  )}
                 </strong>
               </div>
             </div>
@@ -209,7 +276,7 @@ export default function DispatchClientView({
           <div className="pt-2 flex justify-end">
             <button
               type="submit"
-              disabled={loading || !selectedBatch || selectedBatch.quantity <= 0}
+              disabled={loading || !selectedBatch || (selectedBatch.quantity || 0) <= 0 || !selectedRep}
               className="px-8 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white text-sm font-bold transition shadow-lg shadow-emerald-600/20 flex items-center gap-2 disabled:opacity-50"
             >
               <Truck className="w-4 h-4" />
@@ -228,70 +295,76 @@ export default function DispatchClientView({
           </h2>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {repVanStocks.map(({ rep, stock, totalUnits }) => (
-            <div
-              key={rep.id}
-              className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col justify-between"
-            >
-              <div>
-                <div className="flex items-start justify-between pb-3 border-b border-slate-100 mb-3">
-                  <div>
-                    <h3 className="font-bold text-slate-900 text-sm">{rep.name}</h3>
-                    <p className="text-[11px] text-slate-500">{rep.assignedRoute}</p>
+        {repVanStocks.length === 0 ? (
+          <div className="bg-white rounded-2xl p-8 border border-slate-200 text-center text-slate-400 text-sm">
+            لا توجد سيارات مناديب مسجلة حالياً لعرض تفاصيل العهدة
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {repVanStocks.map(({ rep, stock, totalUnits }) => (
+              <div
+                key={rep.id}
+                className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-start justify-between pb-3 border-b border-slate-100 mb-3">
+                    <div>
+                      <h3 className="font-bold text-slate-900 text-sm">{rep.name}</h3>
+                      <p className="text-[11px] text-slate-500">{rep.assignedRoute || 'بدون خط سير'}</p>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                      {totalUnits} كرتونة بالسيارة
+                    </span>
                   </div>
-                  <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-800 border border-blue-200">
-                    {totalUnits} كرتونة بالسيارة
-                  </span>
+
+                  {stock.length === 0 ? (
+                    <div className="py-8 text-center text-xs text-slate-400">
+                      السيارة فارغة حالياً - لم يتم تحميل بضاعة بعد
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {stock.map((item) => (
+                        <div
+                          key={item.id}
+                          className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between text-xs"
+                        >
+                          <div>
+                            <div className="font-bold text-slate-800">{item.product?.name || 'صنف'}</div>
+                            <div className="text-[10px] text-slate-500 font-mono">
+                              تشغيلة: {item.batch?.batchNumber || '-'}
+                            </div>
+                          </div>
+                          <div className="text-left">
+                            <div className="font-bold font-mono text-emerald-700 text-sm">
+                              {item.quantity} كرتونة
+                            </div>
+                            <div
+                              className={`text-[10px] font-bold ${
+                                (item.hoursRemaining ?? 999) <= 16 ? 'text-rose-600' : 'text-slate-500'
+                              }`}
+                            >
+                              متبقي {item.hoursRemaining ?? '-'} س
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
-                {stock.length === 0 ? (
-                  <div className="py-8 text-center text-xs text-slate-400">
-                    السيارة فارغة حالياً - لم يتم تحميل بضاعة بعد
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {stock.map((item) => (
-                      <div
-                        key={item.id}
-                        className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between text-xs"
-                      >
-                        <div>
-                          <div className="font-bold text-slate-800">{item.product.name}</div>
-                          <div className="text-[10px] text-slate-500 font-mono">
-                            تشغيلة: {item.batch.batchNumber}
-                          </div>
-                        </div>
-                        <div className="text-left">
-                          <div className="font-bold font-mono text-emerald-700 text-sm">
-                            {item.quantity} كرتونة
-                          </div>
-                          <div
-                            className={`text-[10px] font-bold ${
-                              item.hoursRemaining <= 16 ? 'text-rose-600' : 'text-slate-500'
-                            }`}
-                          >
-                            متبقي {item.hoursRemaining} س
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <div className="pt-4 mt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRepId(rep.id)}
+                    className="w-full py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition text-center"
+                  >
+                    تحميل بضاعة إضافية لهذه السيارة
+                  </button>
+                </div>
               </div>
-
-              <div className="pt-4 mt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setSelectedRepId(rep.id)}
-                  className="w-full py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition text-center"
-                >
-                  تحميل بضاعة إضافية لهذه السيارة
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
