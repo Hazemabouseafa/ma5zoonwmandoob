@@ -724,6 +724,7 @@ export async function recordSupplierPaymentAction(formData: FormData) {
     });
 
     revalidatePath('/admin/suppliers');
+    revalidatePath('/admin/profit-loss');
     revalidatePath('/admin');
     return {
       success: true,
@@ -767,6 +768,7 @@ export async function createSupplierPurchaseAction(data: {
     revalidatePath('/admin/suppliers');
     revalidatePath('/admin/inventory');
     revalidatePath('/admin/dispatch');
+    revalidatePath('/admin/profit-loss');
     revalidatePath('/admin');
 
     return {

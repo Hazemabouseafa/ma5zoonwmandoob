@@ -188,7 +188,7 @@ export default function AdminNav({ userName }: AdminNavProps) {
         {/* Scrollable Nav Container */}
         <div
           ref={navContainerRef}
-          className="flex-1 overflow-x-auto scrollbar-none scroll-smooth py-2"
+          className="flex-1 overflow-x-auto scrollbar-none scroll-smooth py-2 touch-pan-x [-webkit-overflow-scrolling:touch]"
         >
           <nav className="flex space-x-1 space-x-reverse min-w-max">
             {navItems.map((item) => {

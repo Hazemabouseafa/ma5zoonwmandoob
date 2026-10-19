@@ -2256,9 +2256,10 @@ class DatabaseStore {
       netMarginPercent,
     };
 
-    // 6. Treasury Cash Balance (رصيد الخزنة الفعلي التراكمي)
+    // 6. Treasury Cash Balance & Supplier Payables (رصيد الخزنة الفعلي والتزامات الموردين)
     const supplierPurchases = this.data.supplierPurchases || [];
     const supplierPayments = this.data.supplierPayments || [];
+    const suppliers = this.data.suppliers || [];
     const advances = this.data.advances || [];
 
     const supplierCashPaid = supplierPurchases.reduce((sum, p) => sum + (Number(p.paidAmount) || 0), 0);
@@ -2273,10 +2274,21 @@ class DatabaseStore {
     const totalCashOutflows = totalSupplierOutflow + totalSalariesOutflow + totalAdvancesOutflow;
     const currentTreasuryBalance = totalCollectedCash - totalCashOutflows;
 
+    // Total supplier purchases & unpaid payables (فواتير الموردين الآجلة غير المسددة)
+    const totalAllTimePurchases = supplierPurchases.reduce((sum, p) => sum + (Number(p.totalAmount) || 0), 0);
+    const totalSupplierPayables = Math.max(0, totalAllTimePurchases - totalSupplierOutflow);
+    const netFreeLiquidity = currentTreasuryBalance - totalSupplierPayables;
+    const supplierCoverageRatio = totalSupplierPayables > 0
+      ? (currentTreasuryBalance / totalSupplierPayables) * 100
+      : 100;
+
     const treasury: TreasurySummary = {
       currentBalance: currentTreasuryBalance,
       totalInflows: totalCollectedCash,
       totalOutflows: totalCashOutflows,
+      totalSupplierPayables,
+      netFreeLiquidity,
+      supplierCoverageRatio,
     };
 
     // Product profitability breakdown
@@ -2316,6 +2328,8 @@ class DatabaseStore {
       rawReturns: returns,
       rawBatches: batches,
       rawProducts: products,
+      rawSuppliers: suppliers,
+      rawSupplierPayments: supplierPayments,
     };
 
     return comprehensiveData;

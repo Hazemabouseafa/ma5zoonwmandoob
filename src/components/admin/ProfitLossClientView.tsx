@@ -14,6 +14,7 @@ import {
   ReturnItem,
   InventoryBatch,
   Product,
+  Supplier,
 } from '@/types';
 import {
   TrendingUp,
@@ -47,6 +48,9 @@ import {
   Clock,
   CheckCircle2,
   AlertCircle,
+  Building2,
+  ExternalLink,
+  ChevronLeft,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -136,7 +140,7 @@ export default function ProfitLossClientView({ initialData }: Props) {
     };
   }, [period, customStartDate, customEndDate]);
 
-  // Maps for products & batches
+  // Maps for products, batches & suppliers
   const prodMap = useMemo(() => {
     const map = new Map<string, Product>();
     (data.rawProducts || []).forEach((p) => map.set(p.id, p));
@@ -148,6 +152,12 @@ export default function ProfitLossClientView({ initialData }: Props) {
     (data.rawBatches || []).forEach((b) => map.set(b.id, b));
     return map;
   }, [data.rawBatches]);
+
+  const supplierMap = useMemo(() => {
+    const map = new Map<string, any>();
+    (data.rawSuppliers || []).forEach((s) => map.set(s.id, s));
+    return map;
+  }, [data.rawSuppliers]);
 
   // Dynamic Financial Calculations for the active timeframe & paidOnly toggle
   const financialMetrics = useMemo(() => {
@@ -239,11 +249,46 @@ export default function ProfitLossClientView({ initialData }: Props) {
       totalWastageLoss += (Number(ret.quantity) || 0) * unitCost;
     }
 
-    // 6. Supplier Purchases in period
+    // 6. Supplier Purchases in period (فواتير الموردين والآجل والمسدد في الفترة)
     const totalSupplierPurchases = periodPurchases.reduce(
       (sum, p) => sum + (Number(p.totalAmount) || 0),
       0
     );
+
+    const periodSupplierDirectPaid = periodPurchases.reduce(
+      (sum, p) => sum + (Number(p.paidAmount) || 0),
+      0
+    );
+
+    const periodSupplierPayments = (data.rawSupplierPayments || []).filter((p) => inRange(p.createdAt));
+    const periodSupplierExtraPaid = periodSupplierPayments.reduce(
+      (sum, p) => sum + (Number(p.amount) || 0),
+      0
+    );
+
+    const totalPeriodSupplierCashPaid = periodSupplierDirectPaid + periodSupplierExtraPaid;
+    const periodSupplierRemainingDue = Math.max(0, totalSupplierPurchases - totalPeriodSupplierCashPaid);
+    const periodCreditPurchasesCount = periodPurchases.filter(
+      (p) => p.paymentType === 'credit' || (Number(p.totalAmount) - Number(p.paidAmount)) > 0
+    ).length;
+    const periodSupplierPaymentRatio = totalSupplierPurchases > 0
+      ? (totalPeriodSupplierCashPaid / totalSupplierPurchases) * 100
+      : 100;
+
+    // All-time supplier payables (الفواتير الآجلة غير المسددة بالكامل)
+    const allPurchases = data.rawPurchases || [];
+    const allSupplierPayments = data.rawSupplierPayments || [];
+    const allTimePurchasesTotal = allPurchases.reduce((sum, p) => sum + (Number(p.totalAmount) || 0), 0);
+    const allTimePaidToSuppliers = allPurchases.reduce((sum, p) => sum + (Number(p.paidAmount) || 0), 0) +
+      allSupplierPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    const allTimeSupplierPayables = Math.max(0, allTimePurchasesTotal - allTimePaidToSuppliers);
+
+    const pendingCreditPurchases = allPurchases.filter((p) => {
+      const remaining = (Number(p.totalAmount) || 0) - (Number(p.paidAmount) || 0);
+      return remaining > 0;
+    });
+
+    const netFreeTreasuryCash = (data.treasury?.currentBalance ?? 0) - (data.treasury?.totalSupplierPayables ?? allTimeSupplierPayables);
 
     // 7. Invoices Counts
     const totalInvoicesCount = periodInvoices.length;
@@ -271,11 +316,7 @@ export default function ProfitLossClientView({ initialData }: Props) {
     const netMarginPercent = effectiveRevenue > 0 ? (netPeriodProfit / effectiveRevenue) * 100 : 0;
 
     // Cash Flow in Period (Inflows - Outflows in this period)
-    const periodSupplierCashPaid = periodPurchases.reduce(
-      (sum, p) => sum + (Number(p.paidAmount) || 0),
-      0
-    );
-    const periodCashOutflows = periodSupplierCashPaid + totalOperatingExpenses;
+    const periodCashOutflows = totalPeriodSupplierCashPaid + totalOperatingExpenses;
     const periodNetCashFlow = totalCollectedCash - periodCashOutflows;
 
     return {
@@ -293,6 +334,13 @@ export default function ProfitLossClientView({ initialData }: Props) {
       totalDiscounts,
       totalWastageLoss,
       totalSupplierPurchases,
+      periodSupplierCashPaid: totalPeriodSupplierCashPaid,
+      periodSupplierRemainingDue,
+      periodCreditPurchasesCount,
+      periodSupplierPaymentRatio,
+      allTimeSupplierPayables,
+      pendingCreditPurchases,
+      netFreeTreasuryCash,
       totalInvoicesCount,
       cashInvoicesCount,
       creditInvoicesCount,
@@ -547,40 +595,75 @@ export default function ProfitLossClientView({ initialData }: Props) {
           </div>
         </div>
 
-        {/* Secondary Metric: Treasury & Cash Inflows/Outflows */}
-        <div className="lg:col-span-4 bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/90 shadow-sm flex flex-col justify-between relative overflow-hidden">
+        {/* Secondary Metric: Treasury & Cash Inflows/Outflows Linked to Supplier Debts */}
+        <div className="lg:col-span-4 bg-white p-5 sm:p-7 rounded-3xl border border-slate-200/90 shadow-sm flex flex-col justify-between relative overflow-hidden">
           <div>
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0">
                   <Wallet className="w-5 h-5" />
                 </div>
                 <div>
-                  <div className="text-xs font-bold text-slate-500">السيولة النقدية</div>
-                  <h3 className="font-black text-slate-900 text-base">رصيد الخزنة الحالي</h3>
+                  <div className="text-xs font-bold text-slate-500">السيولة النقدية والموردين</div>
+                  <h3 className="font-black text-slate-900 text-base">رصيد الخزنة والسيولة الحرة</h3>
                 </div>
               </div>
               <span
-                className={`text-[11px] font-black px-2.5 py-0.5 rounded-full ${
-                  isTreasuryPositive ? 'bg-teal-100 text-teal-800' : 'bg-rose-100 text-rose-800'
+                className={`text-[11px] font-black px-2.5 py-0.5 rounded-full shrink-0 ${
+                  financialMetrics.netFreeTreasuryCash >= 0
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                    : 'bg-rose-100 text-rose-800 border border-rose-200'
                 }`}
               >
-                {isTreasuryPositive ? 'سيولة موجبة' : 'سحب على المكشوف'}
+                {financialMetrics.netFreeTreasuryCash >= 0 ? 'فائض سيولة حرة' : 'عجز تغطية موردين'}
               </span>
             </div>
 
-            <div className="mt-2">
-              <div className="text-3xl sm:text-4xl font-black text-teal-900">
-                {data.treasury.currentBalance.toLocaleString('ar-EG')}{' '}
-                <span className="text-sm font-bold text-slate-500">ج.م</span>
+            <div className="mt-2 space-y-3">
+              <div>
+                <div className="text-xs text-slate-500 font-semibold mb-0.5">رصيد الخزنة الفعلي المتوفر:</div>
+                <div className="text-3xl sm:text-4xl font-black text-teal-900 break-words">
+                  {data.treasury.currentBalance.toLocaleString('ar-EG')}{' '}
+                  <span className="text-sm font-bold text-slate-500">ج.م</span>
+                </div>
               </div>
-              <p className="text-xs text-slate-400 mt-1">
-                رصيد السيولة النقدية الفعلي المتوفر بالخزنة الآن (المقبوضات - المدفوعات التراكمية)
-              </p>
+
+              {/* Net Free Liquidity Callout Box linking Supplier Credit Invoices */}
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-600 font-bold flex items-center gap-1.5">
+                    <Truck className="w-3.5 h-3.5 text-slate-400" />
+                    المتبقي لسداد فواتير الموردين:
+                  </span>
+                  <span className="font-black text-rose-600">
+                    {financialMetrics.allTimeSupplierPayables.toLocaleString('ar-EG')} ج.م
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-xs pt-1.5 border-t border-slate-200">
+                  <span className="text-slate-900 font-black flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
+                    صافي السيولة النقدية الحرة:
+                  </span>
+                  <span
+                    className={`font-black ${
+                      financialMetrics.netFreeTreasuryCash >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                    }`}
+                  >
+                    {financialMetrics.netFreeTreasuryCash.toLocaleString('ar-EG')} ج.م
+                  </span>
+                </div>
+
+                <p className="text-[10px] text-slate-500 leading-relaxed">
+                  {financialMetrics.netFreeTreasuryCash >= 0
+                    ? 'السيولة المتبقية بالخزنة بعد خصم كامل ديون وفواتير الموردين الآجلة'
+                    : 'الخزنة بحاجة لتحصيل مبيعات لتغطية مستحقات الموردين الآجلة'}
+                </p>
+              </div>
             </div>
           </div>
 
-          <div className="mt-6 pt-4 border-t border-slate-100 space-y-2 text-xs">
+          <div className="mt-4 pt-3 border-t border-slate-100 space-y-2 text-xs">
             <div className="flex items-center justify-between">
               <span className="text-slate-500 flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
@@ -599,7 +682,7 @@ export default function ProfitLossClientView({ initialData }: Props) {
                 {data.treasury.totalOutflows.toLocaleString('ar-EG')} ج.م
               </span>
             </div>
-            <div className="flex items-center justify-between pt-2 border-t border-dashed border-slate-100">
+            <div className="flex items-center justify-between pt-1.5 border-t border-dashed border-slate-100">
               <span className="font-bold text-slate-700">صافي التدفق النقدي للفترة:</span>
               <span
                 className={`font-black ${
@@ -609,6 +692,15 @@ export default function ProfitLossClientView({ initialData }: Props) {
                 {financialMetrics.periodNetCashFlow.toLocaleString('ar-EG')} ج.م
               </span>
             </div>
+
+            {financialMetrics.pendingCreditPurchases.length > 0 && (
+              <a
+                href="#supplier-payables-section"
+                className="block text-center py-1.5 px-2 bg-teal-50 hover:bg-teal-100 text-teal-800 rounded-xl font-bold text-[11px] transition mt-2"
+              >
+                عرض {financialMetrics.pendingCreditPurchases.length} فاتورة موردين معلقة للسداد ↓
+              </a>
+            )}
           </div>
         </div>
       </div>
@@ -760,8 +852,8 @@ export default function ProfitLossClientView({ initialData }: Props) {
         </div>
 
         {/* The Bar Chart Canvas */}
-        <div className="relative pt-8 pb-4">
-          <div className="grid grid-cols-7 gap-2 sm:gap-4 items-end h-64 sm:h-72 border-b border-slate-200 px-2 sm:px-4">
+        <div className="relative pt-8 pb-4 overflow-x-auto touch-pan-x [-webkit-overflow-scrolling:touch]">
+          <div className="grid grid-cols-7 gap-2 sm:gap-4 items-end h-64 sm:h-72 border-b border-slate-200 px-2 sm:px-4 min-w-[520px]">
             {chartDays.map((d, idx) => {
               const activeVal = paidOnly ? d.collected : d.revenue;
               const revenueHeight = Math.max(6, Math.min(100, (activeVal / maxChartValue) * 100));
@@ -1017,25 +1109,57 @@ export default function ProfitLossClientView({ initialData }: Props) {
             </div>
           </div>
 
-          {/* 8. المشتريات (Supplier Purchases) */}
+          {/* 8. المشتريات والتزامات الموردين (Supplier Purchases & Credit Payables) */}
           <div className="bg-white p-5 rounded-3xl border border-slate-200/90 shadow-xs flex flex-col justify-between hover:border-teal-300 hover:shadow-md transition">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-bold text-slate-500">المشتريات (فواتير الموردين)</span>
-              <div className="w-10 h-10 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center">
+              <span className="text-xs font-bold text-slate-500">المشتريات والتزامات الموردين</span>
+              <div className="w-10 h-10 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
                 <Truck className="w-5 h-5" />
               </div>
             </div>
             <div>
-              <div className="text-2xl sm:text-3xl font-black text-teal-950">
+              <div className="text-2xl sm:text-3xl font-black text-teal-950 break-words">
                 {financialMetrics.totalSupplierPurchases.toLocaleString('ar-EG')}{' '}
                 <span className="text-xs font-bold text-slate-500">ج.م</span>
               </div>
-              <div className="mt-2 text-xs text-slate-500">
-                إجمالي قيمة البضاعة الواردة للمخزن المركزي
+              <div className="mt-2 text-xs space-y-1">
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>المسدد نقداً للموردين:</span>
+                  <span className="font-bold text-emerald-700">
+                    {financialMetrics.periodSupplierCashPaid.toLocaleString('ar-EG')} ج.م
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>المتبقي الآجل للفترة:</span>
+                  <span className="font-bold text-rose-600">
+                    {financialMetrics.periodSupplierRemainingDue.toLocaleString('ar-EG')} ج.م
+                  </span>
+                </div>
+              </div>
+
+              {/* Payment Ratio Progress Bar */}
+              <div className="mt-2.5">
+                <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 mb-1">
+                  <span>نسبة السداد: {financialMetrics.periodSupplierPaymentRatio.toFixed(0)}%</span>
+                  <span>{financialMetrics.periodCreditPurchasesCount} فواتير آجلة</span>
+                </div>
+                <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-300 ${
+                      financialMetrics.periodSupplierRemainingDue === 0 ? 'bg-emerald-500' : 'bg-teal-600'
+                    }`}
+                    style={{
+                      width: `${Math.min(100, Math.max(0, financialMetrics.periodSupplierPaymentRatio))}%`,
+                    }}
+                  />
+                </div>
               </div>
             </div>
-            <div className="mt-3 pt-3 border-t border-slate-100 text-[11px] text-slate-400">
-              فواتير الشراء المسجلة من الموردين في الفترة
+            <div className="mt-3 pt-3 border-t border-slate-100 text-[11px] text-slate-500 flex items-center justify-between">
+              <span>المتبقي التراكمي للموردين:</span>
+              <span className="font-black text-rose-600">
+                {financialMetrics.allTimeSupplierPayables.toLocaleString('ar-EG')} ج.م
+              </span>
             </div>
           </div>
 
@@ -1228,6 +1352,267 @@ export default function ProfitLossClientView({ initialData }: Props) {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* ------------------------------------------------------------- */}
+      {/* SUPPLIER CREDIT INVOICES & OUTSTANDING DEBT TRACKER           */}
+      {/* (جدول فواتير الموردين الآجلة والمتبقي للسداد)                 */}
+      {/* ------------------------------------------------------------- */}
+      <div id="supplier-payables-section" className="bg-white border border-slate-200/90 rounded-3xl shadow-sm overflow-hidden scroll-mt-6">
+        <div className="p-5 sm:p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-slate-50 to-white">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0">
+              <Truck className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-black text-lg text-slate-900">
+                  فواتير الموردين الآجلة والمتبقي للسداد
+                </h3>
+                {financialMetrics.pendingCreditPurchases.length > 0 && (
+                  <span className="px-2 py-0.5 rounded-full text-xs font-black bg-rose-100 text-rose-800 border border-rose-200">
+                    {financialMetrics.pendingCreditPurchases.length} فاتورة معلقة
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                متابعة دقيقة لكافة فواتير التوريد الآجلة وحساب المتبقي لكل فاتورة لتخطيط السيولة النقدية وسداد المستحقات
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <Link
+              href="/admin/suppliers"
+              className="px-3.5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 active:scale-95 shadow-xs"
+            >
+              <span>سداد دفعات الموردين</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        </div>
+
+        {/* Micro-summary Banner */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x sm:divide-x-reverse border-b border-slate-100 bg-slate-50/50 text-xs">
+          <div className="p-4 flex items-center justify-between">
+            <span className="text-slate-500 font-bold">إجمالي المتبقي الفعلي للموردين:</span>
+            <span className="font-black text-rose-600 text-sm">
+              {financialMetrics.allTimeSupplierPayables.toLocaleString('ar-EG')} ج.م
+            </span>
+          </div>
+          <div className="p-4 flex items-center justify-between">
+            <span className="text-slate-500 font-bold">الفواتير الآجلة غير المسددة:</span>
+            <span className="font-black text-slate-800 text-sm">
+              {financialMetrics.pendingCreditPurchases.length} فواتير
+            </span>
+          </div>
+          <div className="p-4 flex items-center justify-between">
+            <span className="text-slate-500 font-bold">صافي السيولة النقدية الحرة:</span>
+            <span
+              className={`font-black text-sm ${
+                financialMetrics.netFreeTreasuryCash >= 0 ? 'text-emerald-700' : 'text-rose-700'
+              }`}
+            >
+              {financialMetrics.netFreeTreasuryCash.toLocaleString('ar-EG')} ج.م
+            </span>
+          </div>
+        </div>
+
+        {/* Invoices List / Table */}
+        {financialMetrics.pendingCreditPurchases.length === 0 ? (
+          <div className="text-center py-12 px-4">
+            <div className="w-14 h-14 rounded-3xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-3">
+              <CheckCircle2 className="w-8 h-8" />
+            </div>
+            <h4 className="text-slate-800 font-black text-base">لا توجد فواتير موردين آجلة معلقة للسداد</h4>
+            <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+              جميع التزامات الشراء والتوريد تم تسويتها بالكامل. الخزنة في أمان ولا توجد مديونيات خارجية للموردين حالياً.
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* Desktop / Tablet Table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-right border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-bold">
+                    <th className="py-3 px-4">رقم الفاتورة</th>
+                    <th className="py-3 px-4">اسم المورد</th>
+                    <th className="py-3 px-4">تاريخ التوريد</th>
+                    <th className="py-3 px-4">إجمالي الفاتورة</th>
+                    <th className="py-3 px-4">المدفوع نقداً</th>
+                    <th className="py-3 px-4 text-rose-700">المتبقي للسداد</th>
+                    <th className="py-3 px-4 text-center">نسبة السداد</th>
+                    <th className="py-3 px-4 text-center">حالة السداد</th>
+                    <th className="py-3 px-4 text-center">إجراء</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {financialMetrics.pendingCreditPurchases.map((purchase) => {
+                    const sup = supplierMap.get(purchase.supplierId);
+                    const total = Number(purchase.totalAmount) || 0;
+                    const paid = Number(purchase.paidAmount) || 0;
+                    const remaining = Math.max(0, total - paid);
+                    const ratio = total > 0 ? (paid / total) * 100 : 100;
+                    const isFullyUnpaid = paid === 0;
+
+                    return (
+                      <tr key={purchase.id} className="hover:bg-slate-50/60 transition">
+                        <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
+                          {purchase.purchaseNumber || `#${purchase.id.slice(-6)}`}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <div className="font-bold text-slate-800">{sup?.name || 'مورد عام'}</div>
+                          {sup?.phone && <div className="text-[11px] text-slate-400 font-mono">{sup.phone}</div>}
+                        </td>
+                        <td className="py-3.5 px-4 text-slate-500">
+                          {new Date(purchase.createdAt).toLocaleDateString('ar-EG', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                          })}
+                        </td>
+                        <td className="py-3.5 px-4 font-bold text-slate-900">
+                          {total.toLocaleString('ar-EG')} ج.م
+                        </td>
+                        <td className="py-3.5 px-4 font-bold text-emerald-700">
+                          {paid.toLocaleString('ar-EG')} ج.م
+                        </td>
+                        <td className="py-3.5 px-4 font-black text-rose-600 text-sm">
+                          {remaining.toLocaleString('ar-EG')} ج.م
+                        </td>
+                        <td className="py-3.5 px-4 text-center min-w-32">
+                          <div className="flex items-center justify-between text-[11px] font-bold text-slate-600 mb-1">
+                            <span>{ratio.toFixed(0)}%</span>
+                          </div>
+                          <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                            <div
+                              className="bg-teal-600 h-full rounded-full"
+                              style={{ width: `${Math.min(100, Math.max(0, ratio))}%` }}
+                            />
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          <span
+                            className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-black ${
+                              isFullyUnpaid
+                                ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                                : 'bg-amber-100 text-amber-800 border border-amber-200'
+                            }`}
+                          >
+                            {isFullyUnpaid ? 'آجل كلياً' : 'مسدد جزئياً'}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          <Link
+                            href="/admin/suppliers"
+                            className="inline-flex items-center gap-1 px-3 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition shadow-2xs"
+                          >
+                            <span>سداد</span>
+                            <ChevronLeft className="w-3.5 h-3.5" />
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Touch-Friendly Card View (sm:hidden) */}
+            <div className="md:hidden divide-y divide-slate-100 p-3 sm:p-4 space-y-3">
+              {financialMetrics.pendingCreditPurchases.map((purchase) => {
+                const sup = supplierMap.get(purchase.supplierId);
+                const total = Number(purchase.totalAmount) || 0;
+                const paid = Number(purchase.paidAmount) || 0;
+                const remaining = Math.max(0, total - paid);
+                const ratio = total > 0 ? (paid / total) * 100 : 100;
+                const isFullyUnpaid = paid === 0;
+
+                return (
+                  <div
+                    key={purchase.id}
+                    className="p-4 bg-slate-50/70 rounded-2xl border border-slate-200/80 space-y-3 hover:bg-white transition"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="font-mono font-black text-slate-900 text-sm">
+                          {purchase.purchaseNumber || `#${purchase.id.slice(-6)}`}
+                        </span>
+                        <div className="text-[11px] text-slate-400">
+                          {new Date(purchase.createdAt).toLocaleDateString('ar-EG', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                          })}
+                        </div>
+                      </div>
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-[11px] font-black ${
+                          isFullyUnpaid
+                            ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                            : 'bg-amber-100 text-amber-800 border border-amber-200'
+                        }`}
+                      >
+                        {isFullyUnpaid ? 'آجل كلياً' : 'مسدد جزئياً'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-200/60">
+                      <span className="text-slate-500 font-bold">المورد:</span>
+                      <span className="font-black text-slate-800">{sup?.name || 'مورد عام'}</span>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 bg-white p-2.5 rounded-xl border border-slate-200/60 text-center text-xs">
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">الإجمالي</span>
+                        <span className="font-bold text-slate-900 text-[11px]">
+                          {total.toLocaleString('ar-EG')} ج.م
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">المدفوع</span>
+                        <span className="font-bold text-emerald-700 text-[11px]">
+                          {paid.toLocaleString('ar-EG')} ج.م
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-rose-500 font-bold block">المتبقي</span>
+                        <span className="font-black text-rose-600 text-xs">
+                          {remaining.toLocaleString('ar-EG')} ج.م
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-[10px] font-bold text-slate-500">
+                        <span>نسبة السداد للمورد</span>
+                        <span>{ratio.toFixed(0)}%</span>
+                      </div>
+                      <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                        <div
+                          className="bg-teal-600 h-full rounded-full"
+                          style={{ width: `${Math.min(100, Math.max(0, ratio))}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="pt-1">
+                      <Link
+                        href="/admin/suppliers"
+                        className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 active:scale-95"
+                      >
+                        <span>سداد دفعة للمورد الآن</span>
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                      </Link>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
       </div>
 
       {/* ------------------------------------------------------------- */}

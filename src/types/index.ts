@@ -249,6 +249,9 @@ export interface TreasurySummary {
   currentBalance: number; // رصيد الخزنة الفعلي الحالي
   totalInflows: number; // إجمالي المقبوضات النقدية التراكمية
   totalOutflows: number; // إجمالي المدفوعات النقدية التراكمية
+  totalSupplierPayables: number; // إجمالي المتبقي لسداد الموردين (فواتير آجلة غير مسددة)
+  netFreeLiquidity: number; // صافي السيولة النقدية الحرة بعد خصم التزامات الموردين
+  supplierCoverageRatio: number; // نسبة تغطية الخزينة لمديونيات الموردين (%)
 }
 
 export interface ComprehensiveProfitLossData {
@@ -273,6 +276,8 @@ export interface ComprehensiveProfitLossData {
   rawReturns: ReturnItem[];
   rawBatches: InventoryBatch[];
   rawProducts: Product[];
+  rawSuppliers: Supplier[];
+  rawSupplierPayments: SupplierPayment[];
 }
 
 // Session User type for JWT & client auth
