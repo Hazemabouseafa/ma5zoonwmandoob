@@ -154,9 +154,9 @@ export default function InvoicesClientView({ invoices: initialInvoices, reps, cl
           <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center flex-shrink-0">
             <FileText className="w-6 h-6" />
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="text-xs font-medium text-slate-500">إجمالي عدد الفواتير</div>
-            <div className="text-2xl font-black text-slate-900 mt-1">
+            <div className="text-xl sm:text-2xl font-black text-slate-900 mt-1 break-words">
               {filteredInvoices.length} <span className="text-xs font-bold text-slate-500">فاتورة</span>
             </div>
           </div>
@@ -166,9 +166,9 @@ export default function InvoicesClientView({ invoices: initialInvoices, reps, cl
           <div className="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center flex-shrink-0">
             <TrendingUp className="w-6 h-6" />
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="text-xs font-medium text-slate-500">صافي المبيعات المطلوبة</div>
-            <div className="text-2xl font-black text-slate-900 mt-1">
+            <div className="text-xl sm:text-2xl font-black text-slate-900 mt-1 break-words">
               {totalSales.toLocaleString('ar-EG')} <span className="text-xs font-bold text-slate-500">ج.م</span>
             </div>
           </div>
@@ -179,9 +179,9 @@ export default function InvoicesClientView({ invoices: initialInvoices, reps, cl
           <div className="w-12 h-12 rounded-xl bg-amber-200 text-amber-900 flex items-center justify-center flex-shrink-0">
             <Percent className="w-6 h-6" />
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="text-xs font-bold text-amber-800">إجمالي الخصومات الممنوحة</div>
-            <div className="text-2xl font-black text-amber-900 mt-1">
+            <div className="text-xl sm:text-2xl font-black text-amber-900 mt-1 break-words">
               {totalDiscounts.toLocaleString('ar-EG')} <span className="text-xs font-bold text-amber-700">ج.م</span>
             </div>
           </div>
@@ -191,9 +191,9 @@ export default function InvoicesClientView({ invoices: initialInvoices, reps, cl
           <div className="w-12 h-12 rounded-xl bg-teal-100 text-teal-700 flex items-center justify-center flex-shrink-0">
             <Wallet className="w-6 h-6" />
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="text-xs font-medium text-slate-500">النقدية المحصلة فعلياً</div>
-            <div className="text-2xl font-black text-emerald-600 mt-1">
+            <div className="text-xl sm:text-2xl font-black text-emerald-600 mt-1 break-words">
               {totalPaid.toLocaleString('ar-EG')} <span className="text-xs font-bold text-slate-500">ج.م</span>
             </div>
           </div>
@@ -367,7 +367,7 @@ export default function InvoicesClientView({ invoices: initialInvoices, reps, cl
 
       {/* Invoices List Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="p-4 bg-slate-50/70 border-b border-slate-200 flex items-center justify-between">
+        <div className="p-4 bg-slate-50/70 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-4">
           <h2 className="text-sm font-bold text-slate-800">
             سجل الفواتير الصادرة للمناديب والخصومات المسجلة
           </h2>
@@ -381,8 +381,8 @@ export default function InvoicesClientView({ invoices: initialInvoices, reps, cl
             لا توجد فواتير مبيعات مطابقة لمعايير البحث حالياً.
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-right text-sm">
+          <div className="overflow-x-auto touch-pan-x">
+            <table className="w-full text-right text-sm min-w-[900px]">
               <thead>
                 <tr className="border-b border-slate-200 text-slate-500 text-xs bg-slate-50/40">
                   <th className="py-3 pr-4">رقم الفاتورة</th>

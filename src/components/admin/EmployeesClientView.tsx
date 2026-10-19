@@ -318,10 +318,10 @@ export default function EmployeesClientView({
       <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
         {/* Navigation Tabs & Actions */}
         <div className="p-4 sm:p-5 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
+          <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl overflow-x-auto scrollbar-none touch-pan-x w-full md:w-auto">
             <button
               onClick={() => setActiveTab('employees')}
-              className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+              className={`px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all whitespace-nowrap shrink-0 ${
                 activeTab === 'employees'
                   ? 'bg-white text-slate-900 shadow-sm'
                   : 'text-slate-600 hover:text-slate-900'
@@ -334,7 +334,7 @@ export default function EmployeesClientView({
             </button>
             <button
               onClick={() => setActiveTab('payroll')}
-              className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+              className={`px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all whitespace-nowrap shrink-0 ${
                 activeTab === 'payroll'
                   ? 'bg-white text-slate-900 shadow-sm'
                   : 'text-slate-600 hover:text-slate-900'
@@ -347,13 +347,13 @@ export default function EmployeesClientView({
             </button>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 w-full md:w-auto">
             <button
               onClick={() => {
                 resetEmpForm();
                 setShowAddModal(true);
               }}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold shadow-sm transition flex items-center gap-2"
+              className="w-full sm:w-auto justify-center px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-sm transition flex items-center gap-2"
             >
               <UserPlus className="w-4 h-4" />
               <span>إضافة موظف جديد</span>
@@ -396,7 +396,7 @@ export default function EmployeesClientView({
 
         {/* Tab 1: Employees List */}
         {activeTab === 'employees' && (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto touch-pan-x">
             {filteredEmployees.length === 0 ? (
               <div className="text-center py-12 px-4">
                 <Users className="w-12 h-12 text-slate-300 mx-auto mb-3" />
@@ -406,7 +406,7 @@ export default function EmployeesClientView({
                 </p>
               </div>
             ) : (
-              <table className="w-full text-right border-collapse">
+              <table className="w-full text-right border-collapse min-w-[650px]">
                 <thead>
                   <tr className="bg-slate-50/70 border-b border-slate-200 text-xs font-bold text-slate-500">
                     <th className="py-3 px-4">اسم الموظف</th>
@@ -489,7 +489,7 @@ export default function EmployeesClientView({
 
         {/* Tab 2: Payroll History */}
         {activeTab === 'payroll' && (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto touch-pan-x">
             {filteredPayroll.length === 0 ? (
               <div className="text-center py-12 px-4">
                 <Banknote className="w-12 h-12 text-slate-300 mx-auto mb-3" />
@@ -499,7 +499,7 @@ export default function EmployeesClientView({
                 </p>
               </div>
             ) : (
-              <table className="w-full text-right border-collapse">
+              <table className="w-full text-right border-collapse min-w-[680px]">
                 <thead>
                   <tr className="bg-slate-50/70 border-b border-slate-200 text-xs font-bold text-slate-500">
                     <th className="py-3 px-4">تاريخ الصرف</th>

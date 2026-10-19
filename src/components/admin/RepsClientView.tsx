@@ -252,10 +252,10 @@ export default function RepsClientView({
       {/* Top Banner & Tabs */}
       <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
         {/* Navigation Tabs */}
-        <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
+        <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl overflow-x-auto scrollbar-none touch-pan-x w-full md:w-auto">
           <button
             onClick={() => setActiveTab('targets')}
-            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+            className={`px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all whitespace-nowrap shrink-0 ${
               activeTab === 'targets'
                 ? 'bg-white text-slate-900 shadow-sm'
                 : 'text-slate-600 hover:text-slate-900'
@@ -268,7 +268,7 @@ export default function RepsClientView({
           </button>
           <button
             onClick={() => setActiveTab('accounts')}
-            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+            className={`px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all whitespace-nowrap shrink-0 ${
               activeTab === 'accounts'
                 ? 'bg-white text-slate-900 shadow-sm'
                 : 'text-slate-600 hover:text-slate-900'
@@ -282,11 +282,11 @@ export default function RepsClientView({
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 w-full md:w-auto">
           {activeTab === 'targets' ? (
             <button
               onClick={() => handleOpenTargetModal()}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-2"
+              className="w-full sm:w-auto justify-center px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-2"
             >
               <Target className="w-4 h-4" />
               <span>تحديد تارجت لمندوب</span>
@@ -294,7 +294,7 @@ export default function RepsClientView({
           ) : (
             <button
               onClick={() => setShowAddModal(true)}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-2"
+              className="w-full sm:w-auto justify-center px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-2"
             >
               <UserPlus className="w-4 h-4" />
               <span>إضافة مندوب مبيعات جديد</span>
@@ -454,14 +454,14 @@ export default function RepsClientView({
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto touch-pan-x">
               {repsPerfList.length === 0 ? (
                 <div className="text-center py-12 px-4">
                   <Users className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                   <p className="text-slate-600 font-bold">لا يوجد مناديب مسجلون حالياً</p>
                 </div>
               ) : (
-                <table className="w-full text-right border-collapse">
+                <table className="w-full text-right border-collapse min-w-[720px]">
                   <thead>
                     <tr className="bg-slate-50/70 border-b border-slate-200 text-xs font-bold text-slate-500">
                       <th className="py-3 px-4">المندوب وخط السير</th>
@@ -600,19 +600,19 @@ export default function RepsClientView({
               }`}
             >
               <div>
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold">
+                <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold shrink-0">
                       <Users className="w-5 h-5" />
                     </div>
-                    <div>
-                      <h3 className="font-bold text-slate-900 text-base">{rep.name}</h3>
-                      <div className="text-xs text-slate-500 font-mono">@{rep.username}</div>
+                    <div className="min-w-0">
+                      <h3 className="font-bold text-slate-900 text-base break-words">{rep.name}</h3>
+                      <div className="text-xs text-slate-500 font-mono truncate">@{rep.username}</div>
                     </div>
                   </div>
 
                   <span
-                    className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                    className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold shrink-0 ${
                       rep.isActive
                         ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                         : 'bg-rose-100 text-rose-800 border border-rose-200'

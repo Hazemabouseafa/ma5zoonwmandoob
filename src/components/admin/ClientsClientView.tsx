@@ -165,13 +165,13 @@ export default function ClientsClientView({ clients }: Props) {
               className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs hover:border-slate-300 hover:shadow-sm transition flex flex-col justify-between"
             >
               <div>
-                <div className="flex items-start justify-between gap-2 mb-3">
-                  <div className="flex items-center gap-2.5">
+                <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
                     <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold flex-shrink-0">
                       <Store className="w-5 h-5" />
                     </div>
-                    <div>
-                      <h3 className="font-bold text-slate-900 text-base">{client.name}</h3>
+                    <div className="min-w-0">
+                      <h3 className="font-bold text-slate-900 text-base break-words">{client.name}</h3>
                       <div className="text-[11px] text-slate-400 font-mono">
                         كود: {client.id.slice(-6)}
                       </div>
@@ -179,7 +179,7 @@ export default function ClientsClientView({ clients }: Props) {
                   </div>
 
                   <span
-                    className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                    className={`px-2.5 py-1 rounded-full text-xs font-bold shrink-0 ${
                       client.creditBalance > 0
                         ? 'bg-rose-50 text-rose-700 border border-rose-200'
                         : 'bg-emerald-50 text-emerald-700 border border-emerald-200'

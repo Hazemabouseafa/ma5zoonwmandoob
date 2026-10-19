@@ -168,11 +168,11 @@ export default function AdminSettingsClientView({ initialStats, adminName }: Pro
               <Database className="w-6 h-6" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-black text-slate-900">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-lg font-black text-slate-900 break-words">
                   سحب وتحميل نسخة احتياطية كاملة (Full Backup)
                 </h2>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-blue-100 text-blue-800">
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-blue-100 text-blue-800 shrink-0">
                   JSON موثق
                 </span>
               </div>
@@ -185,7 +185,7 @@ export default function AdminSettingsClientView({ initialStats, adminName }: Pro
           <button
             onClick={handleDownloadBackup}
             disabled={isDownloading}
-            className="px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-black shadow-md shadow-blue-600/20 transition flex items-center justify-center gap-2 active:scale-95 shrink-0"
+            className="w-full sm:w-auto px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-black shadow-md shadow-blue-600/20 transition flex items-center justify-center gap-2 active:scale-95 shrink-0"
           >
             {isDownloading ? (
               <>
@@ -253,12 +253,12 @@ export default function AdminSettingsClientView({ initialStats, adminName }: Pro
             </div>
           </div>
 
-          <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100 flex items-center justify-between text-xs">
+          <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
             <span className="text-blue-900 font-bold flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-blue-600" />
-              صيغة النسخة الاحتياطية: ملف JSON قياسي متوافق مع كافة أنظمة الاسترجاع ومعايير الأمان العالمية.
+              <Sparkles className="w-4 h-4 text-blue-600 shrink-0" />
+              <span>صيغة النسخة الاحتياطية: ملف JSON قياسي متوافق مع كافة أنظمة الاسترجاع ومعايير الأمان العالمية.</span>
             </span>
-            <span className="text-blue-700 font-mono text-[11px]">UTF-8 • JSON Schema 2.0</span>
+            <span className="text-blue-700 font-mono text-[11px] shrink-0">UTF-8 • JSON Schema 2.0</span>
           </div>
         </div>
       </div>
@@ -273,11 +273,11 @@ export default function AdminSettingsClientView({ initialStats, adminName }: Pro
               <ShieldAlert className="w-6 h-6" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-black text-rose-950">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-lg font-black text-rose-950 break-words">
                   منطقة العمليات الحساسة (Danger Zone) — مسح وضبط النظام
                 </h2>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-rose-200 text-rose-900">
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-rose-200 text-rose-900 shrink-0">
                   محمي بكلمة السر
                 </span>
               </div>
@@ -294,7 +294,7 @@ export default function AdminSettingsClientView({ initialStats, adminName }: Pro
               setConfirmPassword('');
               setShowWipeModal(true);
             }}
-            className="px-5 py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl text-xs font-black shadow-md shadow-rose-600/20 transition flex items-center justify-center gap-2 active:scale-95 shrink-0"
+            className="w-full sm:w-auto px-5 py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl text-xs font-black shadow-md shadow-rose-600/20 transition flex items-center justify-center gap-2 active:scale-95 shrink-0"
           >
             <AlertTriangle className="w-4 h-4" />
             <span>مسح أو إعادة ضبط بيانات النظام</span>

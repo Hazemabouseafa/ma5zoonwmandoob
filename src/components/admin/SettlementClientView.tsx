@@ -194,9 +194,9 @@ export default function SettlementClientView({
 
             {/* Van Stock Physical Count (المتبقي في السيارة) */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 mb-3 gap-1">
                 <div className="flex items-center gap-2">
-                  <Truck className="w-4 h-4 text-emerald-600" />
+                  <Truck className="w-4 h-4 text-emerald-600 shrink-0" />
                   <h3 className="font-bold text-slate-900 text-sm">
                     المخزون الفعلي المتبقي في السيارة (جرد نهاية اليوم)
                   </h3>
@@ -352,8 +352,8 @@ export default function SettlementClientView({
         <div className="p-4 bg-slate-50/70 border-b border-slate-200">
           <h3 className="font-bold text-slate-800 text-sm">سجل التسويات السابقة المعتمدة</h3>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-right text-sm">
+        <div className="overflow-x-auto touch-pan-x">
+          <table className="w-full text-right text-sm min-w-[700px]">
             <thead>
               <tr className="border-b border-slate-200 text-slate-500 text-xs bg-slate-50/40">
                 <th className="py-3 pr-4">التاريخ</th>

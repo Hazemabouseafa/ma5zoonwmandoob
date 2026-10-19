@@ -106,36 +106,36 @@ export default async function AdminDashboardPage() {
 
         {/* 4 Mini Breakdown Metrics Inside Dashboard P&L */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-6 pt-5 border-t border-slate-700/60">
-          <div className="bg-slate-800/80 p-3.5 rounded-2xl border border-slate-700/50">
-            <div className="text-[11px] font-bold text-slate-400">إجمالي الإيرادات</div>
-            <div className="text-base sm:text-lg font-black text-white mt-1">
-              {profitLoss.summary.totalRevenue.toLocaleString('ar-EG')} <span className="text-xs font-normal text-slate-400">ج.م</span>
+          <div className="bg-slate-800/80 p-3.5 rounded-2xl border border-slate-700/50 min-w-0">
+            <div className="text-[11px] font-bold text-slate-400 truncate">إجمالي الإيرادات</div>
+            <div className="text-sm sm:text-lg font-black text-white mt-1 break-words">
+              {profitLoss.summary.totalRevenue.toLocaleString('ar-EG')} <span className="text-[11px] sm:text-xs font-normal text-slate-400">ج.م</span>
             </div>
-            <div className="text-[10px] text-blue-400 mt-0.5">مبيعات صادرة</div>
+            <div className="text-[10px] text-blue-400 mt-0.5 truncate">مبيعات صادرة</div>
           </div>
 
-          <div className="bg-slate-800/80 p-3.5 rounded-2xl border border-slate-700/50">
-            <div className="text-[11px] font-bold text-slate-400">تكلفة البضاعة (COGS)</div>
-            <div className="text-base sm:text-lg font-black text-amber-400 mt-1">
-              {profitLoss.summary.cogs.toLocaleString('ar-EG')} <span className="text-xs font-normal text-slate-400">ج.م</span>
+          <div className="bg-slate-800/80 p-3.5 rounded-2xl border border-slate-700/50 min-w-0">
+            <div className="text-[11px] font-bold text-slate-400 truncate">تكلفة البضاعة (COGS)</div>
+            <div className="text-sm sm:text-lg font-black text-amber-400 mt-1 break-words">
+              {profitLoss.summary.cogs.toLocaleString('ar-EG')} <span className="text-[11px] sm:text-xs font-normal text-slate-400">ج.م</span>
             </div>
-            <div className="text-[10px] text-amber-300/80">تكلفة توريد الموردين</div>
+            <div className="text-[10px] text-amber-300/80 truncate">تكلفة توريد الموردين</div>
           </div>
 
-          <div className="bg-slate-800/80 p-3.5 rounded-2xl border border-slate-700/50">
-            <div className="text-[11px] font-bold text-slate-400">مجمل الربح التجاري</div>
-            <div className="text-base sm:text-lg font-black text-emerald-400 mt-1">
-              {profitLoss.summary.grossProfit.toLocaleString('ar-EG')} <span className="text-xs font-normal text-slate-400">ج.م</span>
+          <div className="bg-slate-800/80 p-3.5 rounded-2xl border border-slate-700/50 min-w-0">
+            <div className="text-[11px] font-bold text-slate-400 truncate">مجمل الربح التجاري</div>
+            <div className="text-sm sm:text-lg font-black text-emerald-400 mt-1 break-words">
+              {profitLoss.summary.grossProfit.toLocaleString('ar-EG')} <span className="text-[11px] sm:text-xs font-normal text-slate-400">ج.م</span>
             </div>
-            <div className="text-[10px] text-emerald-300/80">هامش {profitLoss.summary.grossMarginPercent.toFixed(1)}%</div>
+            <div className="text-[10px] text-emerald-300/80 truncate">هامش {profitLoss.summary.grossMarginPercent.toFixed(1)}%</div>
           </div>
 
-          <div className="bg-slate-800/80 p-3.5 rounded-2xl border border-slate-700/50">
-            <div className="text-[11px] font-bold text-slate-400">المصروفات والتوالف</div>
-            <div className="text-base sm:text-lg font-black text-rose-400 mt-1">
-              {profitLoss.summary.totalExpenses.toLocaleString('ar-EG')} <span className="text-xs font-normal text-slate-400">ج.م</span>
+          <div className="bg-slate-800/80 p-3.5 rounded-2xl border border-slate-700/50 min-w-0">
+            <div className="text-[11px] font-bold text-slate-400 truncate">المصروفات والتوالف</div>
+            <div className="text-sm sm:text-lg font-black text-rose-400 mt-1 break-words">
+              {profitLoss.summary.totalExpenses.toLocaleString('ar-EG')} <span className="text-[11px] sm:text-xs font-normal text-slate-400">ج.م</span>
             </div>
-            <div className="text-[10px] text-rose-300/80">
+            <div className="text-[10px] text-rose-300/80 truncate" title={`مرتبات ${profitLoss.summary.totalSalaries.toLocaleString('ar-EG')} + توالف`}>
               مرتبات {profitLoss.summary.totalSalaries.toLocaleString('ar-EG')} + توالف
             </div>
           </div>

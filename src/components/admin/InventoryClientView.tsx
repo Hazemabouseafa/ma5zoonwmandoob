@@ -417,12 +417,12 @@ export default function InventoryClientView({
   return (
     <div className="space-y-6">
       {/* Action Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
         {/* Dynamic Category Filter Pills */}
-        <div className="flex items-center gap-1.5 p-1 bg-white border border-slate-200 rounded-xl overflow-x-auto shadow-xs">
+        <div className="flex items-center gap-1.5 p-1 bg-white border border-slate-200 rounded-xl overflow-x-auto scrollbar-none touch-pan-x shadow-xs max-w-full">
           <button
             onClick={() => setSelectedCategory('all')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap ${
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap shrink-0 ${
               selectedCategory === 'all'
                 ? 'bg-slate-900 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -448,7 +448,7 @@ export default function InventoryClientView({
               <button
                 key={cat.id}
                 onClick={() => setSelectedCategory(cat.name)}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap ${
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap shrink-0 ${
                   isSelected
                     ? 'bg-emerald-600 text-white shadow-xs'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -461,7 +461,7 @@ export default function InventoryClientView({
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
           {/* Manage Categories Button */}
           <button
             onClick={() => {
@@ -469,7 +469,7 @@ export default function InventoryClientView({
               setCatSuccess(null);
               setShowCategoriesModal(true);
             }}
-            className="px-3.5 py-2 rounded-xl border border-indigo-200 hover:bg-indigo-50 text-indigo-700 text-xs font-bold transition flex items-center gap-1.5 bg-indigo-50/60 shadow-xs"
+            className="flex-1 sm:flex-none justify-center px-3.5 py-2 rounded-xl border border-indigo-200 hover:bg-indigo-50 text-indigo-700 text-xs font-bold transition flex items-center gap-1.5 bg-indigo-50/60 shadow-xs whitespace-nowrap"
           >
             <Tags className="w-4 h-4 text-indigo-600" />
             <span>إدارة التصنيفات ({categories.length})</span>
@@ -480,7 +480,7 @@ export default function InventoryClientView({
               setProductSearch('');
               setShowProductsModal(true);
             }}
-            className="px-3.5 py-2 rounded-xl border border-emerald-200 hover:bg-emerald-50 text-emerald-800 text-xs font-bold transition flex items-center gap-1.5 bg-emerald-50/60 shadow-xs"
+            className="flex-1 sm:flex-none justify-center px-3.5 py-2 rounded-xl border border-emerald-200 hover:bg-emerald-50 text-emerald-800 text-xs font-bold transition flex items-center gap-1.5 bg-emerald-50/60 shadow-xs whitespace-nowrap"
           >
             <Package className="w-4 h-4 text-emerald-600" />
             <span>دليل الأصناف ({productsList.length})</span>
@@ -488,7 +488,7 @@ export default function InventoryClientView({
 
           <button
             onClick={() => setShowProductModal(true)}
-            className="px-3.5 py-2 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-bold transition flex items-center gap-1.5 bg-white shadow-xs"
+            className="flex-1 sm:flex-none justify-center px-3.5 py-2 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-bold transition flex items-center gap-1.5 bg-white shadow-xs whitespace-nowrap"
           >
             <PackagePlus className="w-4 h-4 text-slate-500" />
             <span>تعريف صنف جديد</span>
@@ -496,7 +496,7 @@ export default function InventoryClientView({
 
           <Link
             href="/admin/suppliers"
-            className="px-3.5 py-2 rounded-xl border border-blue-200 hover:bg-blue-100/70 text-blue-800 text-xs font-bold transition flex items-center gap-1.5 bg-blue-50/70 shadow-xs"
+            className="flex-1 sm:flex-none justify-center px-3.5 py-2 rounded-xl border border-blue-200 hover:bg-blue-100/70 text-blue-800 text-xs font-bold transition flex items-center gap-1.5 bg-blue-50/70 shadow-xs whitespace-nowrap"
           >
             <Building2 className="w-4 h-4 text-blue-600" />
             <span>توريد من مورد للمخزن</span>
@@ -504,7 +504,7 @@ export default function InventoryClientView({
 
           <button
             onClick={() => setShowBatchModal(true)}
-            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-sm shadow-emerald-600/20"
+            className="w-full sm:w-auto justify-center px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-sm shadow-emerald-600/20 whitespace-nowrap"
           >
             <Plus className="w-4 h-4" />
             <span>تسجيل تشغيلة واردة (FIFO Batch)</span>
@@ -531,9 +531,9 @@ export default function InventoryClientView({
 
       {/* Batches Table with FIFO Sorting */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="p-4 bg-slate-50/70 border-b border-slate-200 flex items-center justify-between">
+        <div className="p-4 bg-slate-50/70 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-4">
           <div className="flex items-center gap-2">
-            <Layers className="w-4 h-4 text-emerald-600" />
+            <Layers className="w-4 h-4 text-emerald-600 shrink-0" />
             <h2 className="text-sm font-bold text-slate-800">
               سجل تشغيلات المستودع الرئيسي (مرتبة حسب الأقدم انتهاءً أولاً - FIFO)
             </h2>
@@ -543,106 +543,146 @@ export default function InventoryClientView({
           </span>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-right text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 text-slate-500 text-xs bg-slate-50/40">
-                <th className="py-3 pr-4">رقم التشغيلة</th>
-                <th className="py-3">اسم المنتج</th>
-                <th className="py-3">النوع وفترة الصلاحية</th>
-                <th className="py-3">تاريخ الإنتاج</th>
-                <th className="py-3">تاريخ الانتهاء</th>
-                <th className="py-3">المتبقي / الأولي</th>
-                <th className="py-3">حالة الصلاحية</th>
-                <th className="py-3">الوقت المتبقي</th>
-                <th className="py-3 pl-4 text-center">الإجراءات</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
+        {filteredBatches.length === 0 ? (
+          <div className="p-12 text-center text-xs text-slate-500">
+            <Layers className="w-10 h-10 text-slate-300 mx-auto mb-2.5" />
+            <p className="font-bold text-slate-700 text-sm">لا توجد تشغيلات مسجلة بالمخزن مطابقة للتصفية</p>
+            <p className="text-slate-400 mt-1">انقر على زر "+ تسجيل تشغيلة واردة" بالأعلى لإدخال تشغيلة جديدة بنظام FIFO</p>
+          </div>
+        ) : (
+          <>
+            {/* 1. Mobile Touch Cards View (md:hidden) — Completely avoids table column collisions on phones */}
+            <div className="block md:hidden divide-y divide-slate-100 p-3 sm:p-4 space-y-3">
               {filteredBatches.map((batch) => {
                 const isDairy = batch.product.category === 'dairy';
                 const isUrgent = batch.hoursRemaining <= (isDairy ? 16 : 48);
                 const isExpired = batch.hoursRemaining <= 0;
+                const stockPercent = batch.initialQuantity > 0
+                  ? Math.min(100, Math.max(0, Math.round((batch.quantity / batch.initialQuantity) * 100)))
+                  : 0;
 
                 return (
-                  <tr key={batch.id} className="hover:bg-slate-50/70 transition">
-                    <td className="py-3 pr-4 font-mono font-bold text-slate-800">
-                      {batch.batchNumber}
-                    </td>
-                    <td className="py-3 font-semibold text-slate-900">
-                      {batch.product.name}
-                    </td>
-                    <td className="py-3 text-xs">
-                      <span
-                        className={`px-2 py-0.5 rounded-md font-bold ${
-                          isDairy
-                            ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                            : 'bg-amber-50 text-amber-700 border border-amber-200'
-                        }`}
-                      >
-                        {isDairy ? 'ألبان (1 يوم)' : `عصائر (${batch.product.shelfLifeDays} أيام)`}
-                      </span>
-                    </td>
-                    <td className="py-3 text-xs text-slate-600 font-mono">
-                      {new Date(batch.productionDate).toLocaleDateString('ar-EG', {
-                        month: 'numeric',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </td>
-                    <td className="py-3 text-xs font-mono font-bold text-slate-800">
-                      {new Date(batch.expiryDate).toLocaleDateString('ar-EG', {
-                        month: 'numeric',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </td>
-                    <td className="py-3 text-xs">
-                      <strong className="text-slate-900 font-mono text-sm">{batch.quantity}</strong>
-                      <span className="text-slate-400"> / {batch.initialQuantity} {batch.product.unit}</span>
-                    </td>
-                    <td className="py-3">
-                      {batch.quantity === 0 ? (
-                        <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-500">
-                          نفدت الكمية
-                        </span>
-                      ) : isExpired ? (
-                        <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200">
-                          منتهية الصلاحية
-                        </span>
-                      ) : isUrgent ? (
-                        <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                          تقترب من الانتهاء
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                          صالحة وطازجة
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3 pl-4">
-                      {batch.quantity === 0 ? (
-                        <span className="text-xs text-slate-400">-</span>
-                      ) : (
-                        <div
-                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold ${
-                            isExpired
-                              ? 'bg-rose-50 text-rose-700'
-                              : isUrgent
-                              ? 'bg-amber-50 text-amber-700'
-                              : 'bg-emerald-50 text-emerald-700'
-                          }`}
-                        >
-                          <Clock className="w-3.5 h-3.5" />
-                          <span>
-                            {isExpired ? 'منتهية' : `${batch.hoursRemaining} ساعة`}
+                  <div
+                    key={batch.id}
+                    className="bg-slate-50/70 rounded-2xl p-4 border border-slate-200/90 space-y-3 hover:bg-white transition shadow-2xs"
+                  >
+                    {/* Header: Product Name + Category + Expiry Status */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h3 className="font-bold text-slate-900 text-sm break-words">
+                            {batch.product.name}
+                          </h3>
+                          <span
+                            className={`px-2 py-0.5 rounded-md text-[11px] font-bold shrink-0 ${
+                              isDairy
+                                ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                : 'bg-amber-50 text-amber-700 border border-amber-200'
+                            }`}
+                          >
+                            {isDairy ? 'ألبان (1 يوم)' : `عصائر (${batch.product.shelfLifeDays} أيام)`}
                           </span>
                         </div>
-                      )}
-                    </td>
-                    <td className="py-3 pl-4 text-center">
+                        <div className="text-xs font-mono font-bold text-slate-500 mt-1">
+                          رقم التشغيلة: <span className="text-slate-900 font-bold">{batch.batchNumber}</span>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0">
+                        {batch.quantity === 0 ? (
+                          <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-500">
+                            نفدت الكمية
+                          </span>
+                        ) : isExpired ? (
+                          <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                            منتهية الصلاحية
+                          </span>
+                        ) : isUrgent ? (
+                          <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200 animate-pulse">
+                            تقترب من الانتهاء
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            صالحة وطازجة
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Stock Quantity & Progress Bar */}
+                    <div className="bg-white p-3 rounded-xl border border-slate-200/80 space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-500 font-medium">الكمية المتبقية بالمخزن:</span>
+                        <div className="font-mono">
+                          <strong className="text-slate-900 font-black text-sm">{batch.quantity}</strong>
+                          <span className="text-slate-400 text-xs"> / {batch.initialQuantity} {batch.product.unit}</span>
+                          <span className="text-emerald-700 font-bold mr-1.5">({stockPercent}%)</span>
+                        </div>
+                      </div>
+                      <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-300 ${
+                            stockPercent > 50
+                              ? 'bg-emerald-500'
+                              : stockPercent > 20
+                              ? 'bg-amber-500'
+                              : 'bg-rose-500'
+                          }`}
+                          style={{ width: `${stockPercent}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Production & Expiry Dates */}
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="p-2.5 bg-white rounded-xl border border-slate-200/60">
+                        <span className="text-[10px] text-slate-400 block mb-0.5 font-bold">تاريخ الإنتاج:</span>
+                        <span className="font-mono text-slate-700 font-semibold text-[11px]">
+                          {new Date(batch.productionDate).toLocaleDateString('ar-EG', {
+                            month: 'numeric',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                      </div>
+
+                      <div className="p-2.5 bg-white rounded-xl border border-slate-200/60">
+                        <span className="text-[10px] text-slate-400 block mb-0.5 font-bold">تاريخ الانتهاء:</span>
+                        <span className="font-mono text-slate-900 font-bold text-[11px]">
+                          {new Date(batch.expiryDate).toLocaleDateString('ar-EG', {
+                            month: 'numeric',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Countdown Badge & Delete Action */}
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-200/60">
+                      <div className="text-xs">
+                        {batch.quantity === 0 ? (
+                          <span className="text-xs text-slate-400">-</span>
+                        ) : (
+                          <div
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${
+                              isExpired
+                                ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                : isUrgent
+                                ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            }`}
+                          >
+                            <Clock className="w-3.5 h-3.5" />
+                            <span>
+                              {isExpired ? 'منتهية الصلاحية' : `متبقي ${batch.hoursRemaining} ساعة`}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
                       <button
                         type="button"
                         onClick={() =>
@@ -653,17 +693,141 @@ export default function InventoryClientView({
                           })
                         }
                         title="حذف التشغيلة"
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                        className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition flex items-center gap-1 border border-rose-200 active:scale-95"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>حذف</span>
                       </button>
-                    </td>
-                  </tr>
+                    </div>
+                  </div>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
+            </div>
+
+            {/* 2. Desktop Full Table View (hidden md:block) */}
+            <div className="hidden md:block overflow-x-auto touch-pan-x">
+              <table className="w-full text-right text-sm min-w-[760px]">
+                <thead>
+                  <tr className="border-b border-slate-200 text-slate-500 text-xs bg-slate-50/40">
+                    <th className="py-3 pr-4">رقم التشغيلة</th>
+                    <th className="py-3">اسم المنتج</th>
+                    <th className="py-3">النوع وفترة الصلاحية</th>
+                    <th className="py-3">تاريخ الإنتاج</th>
+                    <th className="py-3">تاريخ الانتهاء</th>
+                    <th className="py-3">المتبقي / الأولي</th>
+                    <th className="py-3">حالة الصلاحية</th>
+                    <th className="py-3">الوقت المتبقي</th>
+                    <th className="py-3 pl-4 text-center">الإجراءات</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredBatches.map((batch) => {
+                    const isDairy = batch.product.category === 'dairy';
+                    const isUrgent = batch.hoursRemaining <= (isDairy ? 16 : 48);
+                    const isExpired = batch.hoursRemaining <= 0;
+
+                    return (
+                      <tr key={batch.id} className="hover:bg-slate-50/70 transition">
+                        <td className="py-3 pr-4 font-mono font-bold text-slate-800">
+                          {batch.batchNumber}
+                        </td>
+                        <td className="py-3 font-semibold text-slate-900">
+                          {batch.product.name}
+                        </td>
+                        <td className="py-3 text-xs">
+                          <span
+                            className={`px-2 py-0.5 rounded-md font-bold ${
+                              isDairy
+                                ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                : 'bg-amber-50 text-amber-700 border border-amber-200'
+                            }`}
+                          >
+                            {isDairy ? 'ألبان (1 يوم)' : `عصائر (${batch.product.shelfLifeDays} أيام)`}
+                          </span>
+                        </td>
+                        <td className="py-3 text-xs text-slate-600 font-mono">
+                          {new Date(batch.productionDate).toLocaleDateString('ar-EG', {
+                            month: 'numeric',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </td>
+                        <td className="py-3 text-xs font-mono font-bold text-slate-800">
+                          {new Date(batch.expiryDate).toLocaleDateString('ar-EG', {
+                            month: 'numeric',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </td>
+                        <td className="py-3 text-xs">
+                          <strong className="text-slate-900 font-mono text-sm">{batch.quantity}</strong>
+                          <span className="text-slate-400"> / {batch.initialQuantity} {batch.product.unit}</span>
+                        </td>
+                        <td className="py-3">
+                          {batch.quantity === 0 ? (
+                            <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-500">
+                              نفدت الكمية
+                            </span>
+                          ) : isExpired ? (
+                            <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                              منتهية الصلاحية
+                            </span>
+                          ) : isUrgent ? (
+                            <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                              تقترب من الانتهاء
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                              صالحة وطازجة
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 pl-4">
+                          {batch.quantity === 0 ? (
+                            <span className="text-xs text-slate-400">-</span>
+                          ) : (
+                            <div
+                              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold ${
+                                isExpired
+                                  ? 'bg-rose-50 text-rose-700'
+                                  : isUrgent
+                                  ? 'bg-amber-50 text-amber-700'
+                                  : 'bg-emerald-50 text-emerald-700'
+                              }`}
+                            >
+                              <Clock className="w-3.5 h-3.5" />
+                              <span>
+                                {isExpired ? 'منتهية' : `${batch.hoursRemaining} ساعة`}
+                              </span>
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3 pl-4 text-center">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDeleteTarget({
+                                type: 'batch',
+                                id: batch.id,
+                                name: `تشغيلة رقم ${batch.batchNumber} (${batch.product.name})`,
+                              })
+                            }
+                            title="حذف التشغيلة"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Modal: Add New Batch (تسجيل تشغيلة واردة مع احتساب آلي للصلاحية) */}
@@ -767,7 +931,7 @@ export default function InventoryClientView({
                       <span>المورد: <strong className="text-slate-900">{selectedPurchaseItem.supplierName}</strong></span>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                       <div className="bg-white/90 p-2 rounded-xl text-center border border-slate-100 shadow-xs">
                         <div className="text-[10px] text-slate-400 font-bold">إجمالي كمية الفاتورة</div>
                         <div className="font-black text-slate-800 text-sm mt-0.5">{selectedPurchaseItem.totalInvoiceQty} كرتونة</div>
@@ -1232,8 +1396,8 @@ export default function InventoryClientView({
             </div>
 
             {/* Products Table */}
-            <div className="overflow-y-auto border border-slate-200 rounded-2xl flex-1 text-xs">
-              <table className="w-full text-right">
+            <div className="overflow-y-auto overflow-x-auto touch-pan-x border border-slate-200 rounded-2xl flex-1 text-xs">
+              <table className="w-full text-right min-w-[500px]">
                 <thead className="bg-slate-50 text-slate-500 border-b border-slate-200 sticky top-0">
                   <tr>
                     <th className="py-2.5 pr-3">اسم المنتج</th>
