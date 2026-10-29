@@ -1,7 +1,6 @@
 services:
   db:
     image: postgres:16-alpine
-    container_name: al_waseet_db
     restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -21,7 +20,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: al_waseet_app
     restart: always
     depends_on:
       db:
@@ -31,8 +29,8 @@ services:
       PORT: 3000
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-alwaseet2026password}@db:5432/${POSTGRES_DB:-al_waseet}?sslmode=disable
       JWT_SECRET: ${JWT_SECRET:-al-waseet-super-secure-production-key-2026-b2b-dist}
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     volumes:
       - app_data:/app/data
     networks:
