@@ -119,7 +119,7 @@ const globalForPrisma = globalThis as unknown as {
 
 function getPrisma(): any {
   if (typeof window !== 'undefined') return null;
-  const dbUrl = process.env.DATABASE_URL;
+  const dbUrl = (process.env.DATABASE_URL || '').trim();
   if (!dbUrl || dbUrl.includes('ep-dummy') || !dbUrl.startsWith('postgres')) {
     return null;
   }
@@ -127,6 +127,11 @@ function getPrisma(): any {
     try {
       const { PrismaClient } = require('@prisma/client');
       globalForPrisma.prisma = new PrismaClient({
+        datasources: {
+          db: {
+            url: dbUrl,
+          },
+        },
         log: ['error'],
       });
     } catch {

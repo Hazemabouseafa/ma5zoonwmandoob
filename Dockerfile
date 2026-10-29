@@ -46,6 +46,9 @@ ENV HOSTNAME="0.0.0.0"
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
+# Ensure data directory exists with write permissions for nextjs user
+RUN mkdir -p /app/data && chown -R nextjs:nodejs /app/data
+
 # Copy static assets and standalone bundle
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
