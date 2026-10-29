@@ -242,11 +242,15 @@ export default function ProfitLossClientView({ initialData }: Props) {
 
     let totalWastageLoss = 0;
     for (const ret of periodReturns) {
-      const prod = prodMap.get(ret.productId);
-      const batch = ret.batchId ? batchMap.get(ret.batchId) : undefined;
-      const unitCost =
-        batch?.unitCost !== undefined && batch.unitCost > 0 ? batch.unitCost : (prod?.cost || 0);
-      totalWastageLoss += (Number(ret.quantity) || 0) * unitCost;
+      if (ret.amount !== undefined && ret.amount > 0) {
+        totalWastageLoss += Number(ret.amount);
+      } else {
+        const prod = prodMap.get(ret.productId);
+        const batch = ret.batchId ? batchMap.get(ret.batchId) : undefined;
+        const unitCost =
+          batch?.unitCost !== undefined && batch.unitCost > 0 ? batch.unitCost : (prod?.cost || 0);
+        totalWastageLoss += (Number(ret.quantity) || 0) * unitCost;
+      }
     }
 
     // 6. Supplier Purchases in period (فواتير الموردين والآجل والمسدد في الفترة)

@@ -38,6 +38,8 @@ interface ReturnEntry {
   productId: string;
   productName: string;
   quantity: number;
+  amount?: number;
+  totalPrice?: number;
   reason: 'expired' | 'damaged';
   unitPrice: number;
   notes?: string;
@@ -63,9 +65,9 @@ export default function NewInvoiceClientView({
 
   // Cart: Map of productId -> quantity
   const [cart, setCart] = useState<Record<string, number>>({});
-  const [discount, setDiscount] = useState<string>('0');
+  const [discount, setDiscount] = useState<string>('');
   const [paymentType, setPaymentType] = useState<'cash' | 'credit'>('cash');
-  const [partialPaid, setPartialPaid] = useState<string>('0');
+  const [partialPaid, setPartialPaid] = useState<string>('');
   const [notes, setNotes] = useState('');
 
   // Returns in invoice state
@@ -73,8 +75,9 @@ export default function NewInvoiceClientView({
   const [selectedReturnProductId, setSelectedReturnProductId] = useState<string>(
     allProducts[0]?.id || ''
   );
-  const [returnQty, setReturnQty] = useState<string>('1');
-  const [returnReason, setReturnReason] = useState<'expired' | 'damaged'>('expired');
+  const [returnAmount, setReturnAmount] = useState<string>('');
+  const [returnQty, setReturnQty] = useState<string>('');
+  const [returnReason, setReturnReason] = useState<'expired' | 'damaged'>('damaged');
   const [returnNotes, setReturnNotes] = useState<string>('');
 
   // Modals & Status
@@ -100,42 +103,47 @@ export default function NewInvoiceClientView({
   };
 
   const handleAddReturn = () => {
-    const qty = parseInt(returnQty, 10);
-    if (isNaN(qty) || qty <= 0) {
-      alert('يرجى إدخال كمية مرتجع صحيحة (1 أو أكثر)');
-      return;
-    }
     const prod = allProducts.find((p) => p.id === selectedReturnProductId);
     if (!prod) {
-      alert('يرجى تحديد الصنف المرتجع');
+      alert('يرجى تحديد الصنف المرتجع أو التالف');
       return;
     }
 
-    const existingIdx = returnItems.findIndex(
-      (r) => r.productId === selectedReturnProductId && r.reason === returnReason
-    );
+    const numAmount = parseFloat(returnAmount);
+    const qty = parseInt(returnQty, 10);
 
-    if (existingIdx > -1) {
-      setReturnItems((prev) => {
-        const next = [...prev];
-        next[existingIdx].quantity += qty;
-        return next;
-      });
+    let finalAmount: number | undefined;
+    let finalLineTotal: number;
+    let finalQty = 1;
+
+    if (!isNaN(numAmount) && numAmount > 0) {
+      finalAmount = numAmount;
+      finalLineTotal = numAmount;
+      finalQty = !isNaN(qty) && qty > 0 ? qty : 1;
+    } else if (!isNaN(qty) && qty > 0) {
+      finalQty = qty;
+      finalLineTotal = qty * prod.price;
     } else {
-      setReturnItems((prev) => [
-        ...prev,
-        {
-          productId: prod.id,
-          productName: prod.name,
-          quantity: qty,
-          reason: returnReason,
-          unitPrice: prod.price,
-          notes: returnNotes.trim() || undefined,
-        },
-      ]);
+      alert('يرجى إدخال قيمة التلفيات (بالجنيه) أو الكمية');
+      return;
     }
 
-    setReturnQty('1');
+    setReturnItems((prev) => [
+      ...prev,
+      {
+        productId: prod.id,
+        productName: prod.name,
+        quantity: finalQty,
+        amount: finalAmount,
+        totalPrice: finalLineTotal,
+        reason: returnReason,
+        unitPrice: prod.price,
+        notes: returnNotes.trim() || undefined,
+      },
+    ]);
+
+    setReturnAmount('');
+    setReturnQty('');
     setReturnNotes('');
   };
 
@@ -151,7 +159,7 @@ export default function NewInvoiceClientView({
   }, 0);
 
   const returnsTotal = returnItems.reduce(
-    (sum, item) => sum + item.quantity * item.unitPrice,
+    (sum, item) => sum + (item.totalPrice !== undefined ? item.totalPrice : item.quantity * item.unitPrice),
     0
   );
 
@@ -190,6 +198,7 @@ export default function NewInvoiceClientView({
       returns: returnItems.map((r) => ({
         productId: r.productId,
         quantity: r.quantity,
+        amount: r.amount,
         reason: r.reason,
         unitPrice: r.unitPrice,
         notes: r.notes,
@@ -267,7 +276,7 @@ export default function NewInvoiceClientView({
 
     const message = `🧾 *فاتورة مبيعات - المراعي للتوزيع*
 ━━━━━━━━━━━━━━━━━━
-🏢 *تحت إدارة*: أ/ محمود عبد الله
+🏢 *تحت إدارة*: أ/ محمد عبدالله
 🔢 رقم الفاتورة: ${inv.invoiceNumber}
 👤 العميل: ${selectedClient?.name || 'عميل'}
 🚚 المندوب: ${repName}
@@ -435,7 +444,7 @@ ${inv.totalAmount - inv.paidAmount > 0 ? `⚠️ *المتبقي آجل*: ${inv.
           </div>
           {returnItems.length > 0 && (
             <span className="text-xs font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
-              {totalReturnsCount} كرتونة مرتجع
+              إجمالي الخصم: {returnsTotal.toLocaleString('ar-EG')} ج.م
             </span>
           )}
         </div>
@@ -444,7 +453,7 @@ ${inv.totalAmount - inv.paidAmount > 0 ? `⚠️ *المتبقي آجل*: ${inv.
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 pt-1">
           {/* Select Product from allProducts */}
           <div className="sm:col-span-2">
-            <label className="block text-[11px] font-bold text-slate-600 mb-1">الصنف المرتجع:</label>
+            <label className="block text-[11px] font-bold text-slate-600 mb-1">الصنف التالف / المرتجع:</label>
             <select
               value={selectedReturnProductId}
               onChange={(e) => setSelectedReturnProductId(e.target.value)}
@@ -458,15 +467,16 @@ ${inv.totalAmount - inv.paidAmount > 0 ? `⚠️ *المتبقي آجل*: ${inv.
             </select>
           </div>
 
-          {/* Qty & Reason */}
+          {/* Amount & Reason */}
           <div className="grid grid-cols-2 gap-2 sm:col-span-2">
             <div>
-              <label className="block text-[11px] font-bold text-slate-600 mb-1">الكمية:</label>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">قيمة التلفيات (ج.م):</label>
               <input
                 type="number"
-                min="1"
-                value={returnQty}
-                onChange={(e) => setReturnQty(e.target.value)}
+                step="any"
+                min="0.1"
+                value={returnAmount}
+                onChange={(e) => setReturnAmount(e.target.value)}
                 className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-black text-center text-slate-900 focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 font-mono"
               />
             </div>
@@ -478,8 +488,8 @@ ${inv.totalAmount - inv.paidAmount > 0 ? `⚠️ *المتبقي آجل*: ${inv.
                 onChange={(e) => setReturnReason(e.target.value as 'expired' | 'damaged')}
                 className="w-full px-2.5 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-800 bg-white focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500"
               >
-                <option value="expired">منتهي الصلاحية</option>
-                <option value="damaged">تالف / عيب تغليف</option>
+                <option value="damaged">تالف أو كسر (Damaged)</option>
+                <option value="expired">منتهي الصلاحية (Expired)</option>
               </select>
             </div>
           </div>
@@ -493,7 +503,7 @@ ${inv.totalAmount - inv.paidAmount > 0 ? `⚠️ *المتبقي آجل*: ${inv.
             className="w-full sm:w-auto px-4 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold border border-rose-200 flex items-center justify-center gap-1.5 transition"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>إضافة المرتجع إلى الفاتورة</span>
+            <span>إضافة التلفيات إلى الفاتورة</span>
           </button>
         </div>
 
@@ -501,7 +511,7 @@ ${inv.totalAmount - inv.paidAmount > 0 ? `⚠️ *المتبقي آجل*: ${inv.
         {returnItems.length > 0 && (
           <div className="mt-3 space-y-1.5 pt-2 border-t border-slate-100">
             <span className="text-[11px] font-bold text-slate-700 block">
-              المرتجعات المضافة للفاتورة الحالية:
+              التلفيات والمرتجعات المضافة للفاتورة:
             </span>
             <div className="space-y-1.5">
               {returnItems.map((ret, idx) => (
@@ -517,10 +527,21 @@ ${inv.totalAmount - inv.paidAmount > 0 ? `⚠️ *المتبقي آجل*: ${inv.
                       </span>
                     </div>
                     <div className="text-[11px] text-slate-500">
-                      {ret.quantity} كرتونة × {ret.unitPrice} ج.م ={' '}
-                      <strong className="text-rose-700 font-bold">
-                        {(ret.quantity * ret.unitPrice).toLocaleString('ar-EG')} ج.م
-                      </strong>
+                      {ret.amount !== undefined && ret.amount > 0 ? (
+                        <>
+                          قيمة التلفيات:{' '}
+                          <strong className="text-rose-700 font-bold">
+                            {ret.amount.toLocaleString('ar-EG')} ج.م
+                          </strong>
+                        </>
+                      ) : (
+                        <>
+                          {ret.quantity} كرتونة × {ret.unitPrice} ج.م ={' '}
+                          <strong className="text-rose-700 font-bold">
+                            {(ret.quantity * ret.unitPrice).toLocaleString('ar-EG')} ج.م
+                          </strong>
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -528,7 +549,7 @@ ${inv.totalAmount - inv.paidAmount > 0 ? `⚠️ *المتبقي آجل*: ${inv.
                     type="button"
                     onClick={() => handleRemoveReturn(idx)}
                     className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-100 transition"
-                    title="حذف المرتجع"
+                    title="حذف التلفيات"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -584,7 +605,6 @@ ${inv.totalAmount - inv.paidAmount > 0 ? `⚠️ *المتبقي آجل*: ${inv.
                 max={totalAmount}
                 value={partialPaid}
                 onChange={(e) => setPartialPaid(e.target.value)}
-                placeholder="0"
                 className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm font-bold text-slate-900"
               />
             </div>
@@ -606,7 +626,6 @@ ${inv.totalAmount - inv.paidAmount > 0 ? `⚠️ *المتبقي آجل*: ${inv.
                 max={subtotal}
                 value={discount}
                 onChange={(e) => setDiscount(e.target.value)}
-                placeholder="0"
                 className="w-full px-3 py-1.5 rounded-xl border border-amber-300 text-sm font-black text-amber-900 text-center font-mono focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 bg-white"
               />
             </div>
@@ -694,7 +713,6 @@ ${inv.totalAmount - inv.paidAmount > 0 ? `⚠️ *المتبقي آجل*: ${inv.
                   type="text"
                   name="name"
                   required
-                  placeholder="مثلاً: ماركت الصفا"
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm"
                 />
               </div>
@@ -706,7 +724,6 @@ ${inv.totalAmount - inv.paidAmount > 0 ? `⚠️ *المتبقي آجل*: ${inv.
                 <input
                   type="tel"
                   name="phone"
-                  placeholder="010XXXXXXXX"
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm"
                 />
               </div>
@@ -716,7 +733,6 @@ ${inv.totalAmount - inv.paidAmount > 0 ? `⚠️ *المتبقي آجل*: ${inv.
                 <input
                   type="text"
                   name="address"
-                  placeholder="شارع التحرير - الدقي"
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm"
                 />
               </div>

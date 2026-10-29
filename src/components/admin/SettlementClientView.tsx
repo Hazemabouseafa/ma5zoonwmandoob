@@ -241,7 +241,11 @@ export default function SettlementClientView({
                       className="p-3 rounded-xl bg-amber-50/50 border border-amber-200 flex items-center justify-between text-xs"
                     >
                       <div>
-                        <span className="font-bold text-slate-800">{ret.quantity} كرتونة</span>
+                        <span className="font-bold text-slate-800">
+                          {ret.amount !== undefined && ret.amount > 0
+                            ? `${Number(ret.amount).toLocaleString('ar-EG')} ج.م (تلفيات)`
+                            : `${ret.quantity} كرتونة`}
+                        </span>
                         <span className="text-slate-500 mx-1">
                           - السبب: {ret.reason === 'expired' ? 'منتهي الصلاحية' : 'تالف'}
                         </span>

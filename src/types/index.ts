@@ -90,6 +90,7 @@ export interface InvoiceReturnItem {
   quantity: number;
   unitPrice: number;
   totalPrice: number;
+  amount?: number;
   reason: ReturnReason;
   notes?: string;
 }
@@ -118,6 +119,7 @@ export interface ReturnItem {
   productId: string;
   batchId?: string;
   quantity: number;
+  amount?: number;
   reason: ReturnReason;
   notes?: string;
   createdAt: string;

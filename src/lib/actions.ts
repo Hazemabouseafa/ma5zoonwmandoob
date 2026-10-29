@@ -389,7 +389,8 @@ export async function createInvoiceAction(data: {
   }[];
   returns?: {
     productId: string;
-    quantity: number;
+    quantity?: number;
+    amount?: number;
     reason: 'expired' | 'damaged';
     unitPrice?: number;
     notes?: string;
@@ -430,7 +431,8 @@ export async function createInvoiceAction(data: {
 // ----------------------------------------------------
 export async function createReturnAction(data: {
   productId: string;
-  quantity: number;
+  quantity?: number;
+  amount?: number;
   reason: 'expired' | 'damaged';
   notes?: string;
 }) {
@@ -441,7 +443,8 @@ export async function createReturnAction(data: {
     await dbStore.createReturn({
       repId: user.id,
       productId: data.productId,
-      quantity: data.quantity,
+      quantity: data.quantity ?? 1,
+      amount: data.amount,
       reason: data.reason,
       notes: data.notes,
     });

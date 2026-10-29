@@ -80,7 +80,7 @@ function getInitialData(): DatabaseSchema {
   const users: User[] = [
     {
       id: 'usr_admin',
-      name: 'محمود عبد الله (المدير العام)',
+      name: 'محمد عبدالله (المدير العام)',
       username: 'admin',
       password: '123',
       role: 'admin',
@@ -250,8 +250,8 @@ class DatabaseStore {
             raw.users = getInitialData().users;
           }
           const adminUser = raw.users.find((u: any) => u.username === 'admin');
-          if (adminUser && adminUser.name && adminUser.name.includes('محمد')) {
-            adminUser.name = 'محمود عبد الله (المدير العام)';
+          if (adminUser) {
+            adminUser.name = 'محمد عبدالله (المدير العام)';
           }
           if (!raw.categories || !Array.isArray(raw.categories)) raw.categories = [];
           if (!raw.products || !Array.isArray(raw.products)) raw.products = [];
@@ -347,8 +347,8 @@ class DatabaseStore {
         this.isLoaded = true;
 
         const adminUser = this.data.users?.find((u) => u.username === 'admin');
-        if (adminUser && adminUser.name && adminUser.name.includes('محمد')) {
-          adminUser.name = 'محمود عبد الله (المدير العام)';
+        if (adminUser && adminUser.name !== 'محمد عبدالله (المدير العام)') {
+          adminUser.name = 'محمد عبدالله (المدير العام)';
           this.persistToDisk();
         }
 
@@ -937,7 +937,8 @@ class DatabaseStore {
     }[];
     returns?: {
       productId: string;
-      quantity: number;
+      quantity?: number;
+      amount?: number;
       reason: 'expired' | 'damaged';
       unitPrice?: number;
       notes?: string;
@@ -1021,11 +1022,14 @@ class DatabaseStore {
         if (!db.returns) db.returns = [];
 
         for (const retItem of data.returns) {
-          if (!retItem.quantity || retItem.quantity <= 0) continue;
-
+          const qty = Number(retItem.quantity) || 0;
           const prod = db.products.find((p) => p.id === retItem.productId);
           const unitPrice = retItem.unitPrice !== undefined ? retItem.unitPrice : (prod?.price || 0);
-          const lineTotal = retItem.quantity * unitPrice;
+          const lineTotal =
+            retItem.amount !== undefined && retItem.amount > 0
+              ? Number(retItem.amount)
+              : qty * unitPrice;
+          if (lineTotal <= 0 && qty <= 0) continue;
           returnsTotal += lineTotal;
 
           // Record in db.returns tied directly to this invoice
@@ -1033,7 +1037,8 @@ class DatabaseStore {
             id: `ret_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
             repId: data.repId,
             productId: retItem.productId,
-            quantity: retItem.quantity,
+            quantity: qty > 0 ? qty : 1,
+            amount: lineTotal,
             reason: retItem.reason || 'expired',
             notes: retItem.notes || `مرتجع مخصوم من فاتورة ${invoiceNumber}`,
             invoiceId,
@@ -1044,9 +1049,10 @@ class DatabaseStore {
           invoiceReturnItems.push({
             productId: retItem.productId,
             productName: prod?.name || 'صنف مرتجع',
-            quantity: retItem.quantity,
+            quantity: qty > 0 ? qty : 1,
             unitPrice,
             totalPrice: lineTotal,
+            amount: lineTotal,
             reason: retItem.reason || 'expired',
             notes: retItem.notes,
           });
@@ -1114,7 +1120,8 @@ class DatabaseStore {
   async createReturn(data: {
     repId: string;
     productId: string;
-    quantity: number;
+    quantity?: number;
+    amount?: number;
     reason: 'expired' | 'damaged';
     notes?: string;
     invoiceId?: string;
@@ -1130,7 +1137,8 @@ class DatabaseStore {
         id: `ret_${Date.now()}`,
         repId: data.repId,
         productId: data.productId,
-        quantity: data.quantity,
+        quantity: data.quantity ?? 1,
+        amount: data.amount,
         reason: data.reason,
         notes: data.notes,
         invoiceId: data.invoiceId,
@@ -2229,10 +2237,14 @@ class DatabaseStore {
     // C) Wastage & Returns Losses (Damaged / Expired stock loss)
     let totalWastageLoss = 0;
     for (const ret of returns) {
-      const prod = prodMap.get(ret.productId);
-      const batch = ret.batchId ? batchMap.get(ret.batchId) : undefined;
-      const unitCost = batch?.unitCost !== undefined && batch.unitCost > 0 ? batch.unitCost : (prod?.cost || 0);
-      totalWastageLoss += (Number(ret.quantity) || 0) * unitCost;
+      if (ret.amount !== undefined && ret.amount > 0) {
+        totalWastageLoss += Number(ret.amount);
+      } else {
+        const prod = prodMap.get(ret.productId);
+        const batch = ret.batchId ? batchMap.get(ret.batchId) : undefined;
+        const unitCost = batch?.unitCost !== undefined && batch.unitCost > 0 ? batch.unitCost : (prod?.cost || 0);
+        totalWastageLoss += (Number(ret.quantity) || 0) * unitCost;
+      }
     }
 
     const totalExpenses = totalSalaries + totalDiscounts + totalWastageLoss;

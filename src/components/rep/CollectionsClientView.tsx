@@ -20,7 +20,7 @@ interface Props {
 export default function CollectionsClientView({ clients, myCollections }: Props) {
   const router = useRouter();
   const [clientId, setClientId] = useState(clients[0]?.id || '');
-  const [amount, setAmount] = useState<string>('500');
+  const [amount, setAmount] = useState<string>('');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -109,7 +109,7 @@ export default function CollectionsClientView({ clients, myCollections }: Props)
 
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">
-              المبلغ المحصل نقداً (ج.م)
+              المبلغ المحصل نقداً (ج.م) *
             </label>
             <input
               type="number"
@@ -118,7 +118,6 @@ export default function CollectionsClientView({ clients, myCollections }: Props)
               required
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              placeholder="مثلاً: 500"
               className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
             />
           </div>
@@ -131,7 +130,6 @@ export default function CollectionsClientView({ clients, myCollections }: Props)
               type="text"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="مثلاً: دفعة تحت الحساب سند قبض رقم 45"
               className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
             />
           </div>

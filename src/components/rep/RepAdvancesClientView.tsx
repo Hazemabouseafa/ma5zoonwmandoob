@@ -262,7 +262,6 @@ export default function RepAdvancesClientView({ advances }: Props) {
                   step="any"
                   min="1"
                   required
-                  placeholder="مثال: 500"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-900 text-sm font-bold focus:outline-hidden focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
@@ -290,7 +289,6 @@ export default function RepAdvancesClientView({ advances }: Props) {
                 <textarea
                   required
                   rows={3}
-                  placeholder="مثال: مصاريف صيانة طارئة للسيارة / وقود إضافي / سلفة شخصية"
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-900 text-xs leading-relaxed focus:outline-hidden focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"

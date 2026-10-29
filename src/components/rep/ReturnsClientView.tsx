@@ -21,30 +21,32 @@ interface Props {
 export default function ReturnsClientView({ products, myReturns }: Props) {
   const router = useRouter();
   const [productId, setProductId] = useState(products[0]?.id || '');
-  const [quantity, setQuantity] = useState(1);
-  const [reason, setReason] = useState<'expired' | 'damaged'>('expired');
+  const [amount, setAmount] = useState('');
+  const [reason, setReason] = useState<'expired' | 'damaged'>('damaged');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!productId || quantity <= 0) return;
+    const numAmount = parseFloat(amount);
+    if (!productId || isNaN(numAmount) || numAmount <= 0) return;
 
     setLoading(true);
     setMsg(null);
 
     const res = await createReturnAction({
       productId,
-      quantity,
+      amount: numAmount,
+      quantity: 1,
       reason,
       notes: notes.trim() || undefined,
     });
 
     setLoading(false);
     if (res.success) {
-      setMsg({ type: 'success', text: 'تم تسجيل المرتجع بنجاح' });
-      setQuantity(1);
+      setMsg({ type: 'success', text: 'تم تسجيل التلفيات بنجاح' });
+      setAmount('');
       setNotes('');
       router.refresh();
     } else {
@@ -58,7 +60,7 @@ export default function ReturnsClientView({ products, myReturns }: Props) {
       <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-xs space-y-4">
         <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2">
           <RotateCcw className="w-4 h-4 text-amber-600" />
-          <span>تسجيل مرتجع جديد:</span>
+          <span>تسجيل التلفيات والمرتجعات:</span>
         </h2>
 
         {msg && (
@@ -80,7 +82,7 @@ export default function ReturnsClientView({ products, myReturns }: Props) {
 
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">الصنف المرتجع</label>
+            <label className="block text-xs font-bold text-slate-700 mb-1">الصنف التالف / المرتجع</label>
             <select
               value={productId}
               onChange={(e) => setProductId(e.target.value)}
@@ -97,27 +99,28 @@ export default function ReturnsClientView({ products, myReturns }: Props) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
-                الكمية (كرتونة)
+                قيمة التلفيات (جنيه مصري / فلوس) *
               </label>
               <input
                 type="number"
-                min="1"
+                step="any"
+                min="0.1"
                 required
-                value={quantity}
-                onChange={(e) => setQuantity(parseInt(e.target.value, 10) || 1)}
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">سبب الارجاع</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1">السبب</label>
               <select
                 value={reason}
                 onChange={(e) => setReason(e.target.value as any)}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 bg-white"
               >
-                <option value="expired">منتهي الصلاحية (Expired)</option>
                 <option value="damaged">تالف أو مكسور (Damaged)</option>
+                <option value="expired">منتهي الصلاحية (Expired)</option>
               </select>
             </div>
           </div>
@@ -130,7 +133,6 @@ export default function ReturnsClientView({ products, myReturns }: Props) {
               type="text"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="مثلاً: كسر أثناء النقل أو مرتجع من سوبرماركت الأمانة"
               className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600"
             />
           </div>
@@ -141,18 +143,18 @@ export default function ReturnsClientView({ products, myReturns }: Props) {
             className="w-full py-3.5 rounded-xl bg-amber-600 hover:bg-amber-700 active:scale-98 text-white font-bold text-xs transition shadow-md shadow-amber-600/20 flex items-center justify-center gap-2 disabled:opacity-50"
           >
             <AlertOctagon className="w-4 h-4" />
-            <span>{loading ? 'جاري الحفظ...' : 'تسجيل المرتجع في الوردية'}</span>
+            <span>{loading ? 'جاري الحفظ...' : 'تسجيل التلفيات في الوردية'}</span>
           </button>
         </form>
       </div>
 
       {/* Logged Returns List */}
       <div className="space-y-2">
-        <h3 className="text-xs font-bold text-slate-700 px-1">سجل مرتجعاتي السابقة:</h3>
+        <h3 className="text-xs font-bold text-slate-700 px-1">سجل التلفيات والمرتجعات السابقة:</h3>
 
         {myReturns.length === 0 ? (
           <div className="bg-white rounded-2xl p-6 text-center border border-slate-200 text-xs text-slate-500">
-            لا توجد مرتجعات مسجلة حتى الآن.
+            لا توجد تلفيات أو مرتجعات مسجلة حتى الآن.
           </div>
         ) : (
           <div className="space-y-2">
@@ -171,7 +173,9 @@ export default function ReturnsClientView({ products, myReturns }: Props) {
 
                 <div className="text-left">
                   <div className="font-bold text-amber-700 font-mono text-sm">
-                    {ret.quantity} كرتونة
+                    {ret.amount !== undefined && ret.amount > 0
+                      ? `${Number(ret.amount).toLocaleString('ar-EG')} ج.م`
+                      : `${ret.quantity} كرتونة`}
                   </div>
                   <div className="text-[10px] text-slate-400">
                     {new Date(ret.createdAt).toLocaleDateString('ar-EG')}
