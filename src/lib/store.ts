@@ -141,7 +141,7 @@ function getPrisma(): any {
   return globalForPrisma.prisma;
 }
 
-// In-Memory, Neon Cloud & File Store with Atomic Locking
+// In-Memory, Local VPS PostgreSQL & Persistent File Store with Atomic Locking
 class DatabaseStore {
   private data: DatabaseSchema;
   private isLoaded = false;
@@ -197,7 +197,7 @@ class DatabaseStore {
     }
   }
 
-  // Guarantees data is freshly synchronized from Neon PostgreSQL (or local disk fallback)
+  // Guarantees data is freshly synchronized from Local VPS PostgreSQL (or local disk fallback)
   public async ensureLoaded(forceSync = false): Promise<void> {
     const now = Date.now();
     // Cache for 1500ms within same process to keep reads microsecond-fast
@@ -212,8 +212,8 @@ class DatabaseStore {
 
     this.syncInProgress = (async () => {
       try {
-        const neonSynced = await this.syncWithNeon();
-        if (!neonSynced) {
+        const dbSynced = await this.syncWithDatabase();
+        if (!dbSynced) {
           this.loadFromDisk();
         }
         this.lastCheckTime = Date.now();
@@ -230,7 +230,7 @@ class DatabaseStore {
     await this.syncInProgress;
   }
 
-  private async syncWithNeon(): Promise<boolean> {
+  private async syncWithDatabase(): Promise<boolean> {
     const prisma = getPrisma();
     if (!prisma) return false;
     try {
@@ -298,12 +298,12 @@ class DatabaseStore {
         return true;
       }
     } catch (e) {
-      console.error('syncWithNeon error:', e);
+      console.error('syncWithDatabase error:', e);
       return false;
     }
   }
 
-  private async persistToNeon(): Promise<boolean> {
+  private async persistToDatabase(): Promise<boolean> {
     const prisma = getPrisma();
     if (!prisma) return false;
     try {
@@ -318,7 +318,7 @@ class DatabaseStore {
       this.lastModified = now;
       return true;
     } catch (e) {
-      console.error('persistToNeon error:', e);
+      console.error('persistToDatabase error:', e);
       return false;
     }
   }
@@ -438,14 +438,14 @@ class DatabaseStore {
       .catch(() => {})
       .then(async () => {
         try {
-          const neonSynced = await this.syncWithNeon();
-          if (!neonSynced) {
+          const dbSynced = await this.syncWithDatabase();
+          if (!dbSynced) {
             this.loadFromDisk(true);
           }
           result = await fn(this.data);
           this.lastModified = Date.now();
           this.persistToDisk();
-          await this.persistToNeon();
+          await this.persistToDatabase();
         } catch (err) {
           thrownError = err;
         }
