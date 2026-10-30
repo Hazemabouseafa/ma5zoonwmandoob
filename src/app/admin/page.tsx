@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { dbStore } from '@/lib/store';
+import { getCurrentUser } from '@/lib/auth';
 import {
   TrendingUp,
   Wallet,
@@ -20,6 +21,7 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export default async function AdminDashboardPage() {
+  const user = await getCurrentUser();
   const analytics = await dbStore.getAnalytics();
   const profitLoss = await dbStore.getProfitLossEngine();
   const recentInvoices = (await dbStore.getInvoices()).slice(0, 5);
@@ -32,9 +34,9 @@ export default async function AdminDashboardPage() {
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-900/60 text-emerald-200 text-xs font-semibold mb-3 border border-emerald-500/30">
               <Sparkles className="w-3.5 h-3.5" />
-              <span>متابعة العمليات اللحظية • اليوم {new Date().toLocaleDateString('ar-EG', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
+              <span>مرحباً أ/ محمد عبدالله • متابعة العمليات اللحظية • اليوم {new Date().toLocaleDateString('ar-EG', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-black mb-2">لوحة العمليات والرقابة الحية</h1>
+            <h1 className="text-2xl sm:text-3xl font-black mb-2">لوحة العمليات والرقابة الحية - إدارة أ/ محمد عبدالله</h1>
             <p className="text-emerald-100 text-sm max-w-2xl leading-relaxed">
               متابعة حركة سيارات التوزيع، وتنبيهات الصلاحية الحرجة للألبان والعصائر، ومطابقة النقدية والعهدة فورياً لمنع أي عجز أو تلف.
             </p>

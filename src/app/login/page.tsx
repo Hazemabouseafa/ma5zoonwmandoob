@@ -64,7 +64,7 @@ export default function LoginPage() {
           </div>
 
           <h1 className="text-2xl font-bold tracking-tight mb-1">المراعي للتوزيع والتوريدات</h1>
-          <p className="text-emerald-100 text-sm font-medium">تحت إدارة: أ/ محمود عبد الله</p>
+          <p className="text-emerald-100 text-sm font-medium">تحت إدارة: أ/ محمد عبدالله</p>
           <p className="text-emerald-200 text-xs mt-0.5">نظام إدارة المخزون والمبيعات الميدانية (B2B)</p>
           <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-800/50 rounded-full text-xs text-emerald-200 border border-emerald-500/30">
             <PackageCheck className="w-3.5 h-3.5" />
@@ -167,7 +167,7 @@ export default function LoginPage() {
 
         {/* Footer */}
         <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 text-center text-xs text-slate-500">
-          شركة المراعي • إدارة أ/ محمود عبد الله • توزيع الألبان والعصائر
+          شركة المراعي • إدارة أ/ محمد عبدالله • توزيع الألبان والعصائر
         </div>
       </div>
     </div>

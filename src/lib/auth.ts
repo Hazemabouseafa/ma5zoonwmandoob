@@ -29,7 +29,15 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(COOKIE_NAME)?.value;
   if (!token) return null;
-  return verifyToken(token);
+  const decoded = verifyToken(token);
+  if (!decoded) return null;
+  if (decoded.role === 'admin' || decoded.username === 'admin' || decoded.id === 'usr_admin') {
+    return {
+      ...decoded,
+      name: 'محمد عبدالله (المدير العام)',
+    };
+  }
+  return decoded;
 }
 
 export async function setAuthCookie(token: string) {

@@ -776,7 +776,7 @@ ${inv.totalAmount - inv.paidAmount > 0 ? `⚠️ *المتبقي آجل*: ${inv.
               <div className="text-center font-bold text-slate-800 pb-2 border-b border-dashed border-slate-300">
                 شركة المراعي للتوزيع والتوريدات
                 <div className="text-[10px] text-emerald-800 font-bold mt-0.5">
-                  تحت إدارة: أ/ محمود عبد الله
+                  تحت إدارة: أ/ محمد عبدالله
                 </div>
                 <div className="text-[10px] text-slate-500 font-normal">
                   المندوب: {repName} | العميل: {selectedClient?.name}

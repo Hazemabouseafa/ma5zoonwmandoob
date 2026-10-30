@@ -463,27 +463,40 @@ class DatabaseStore {
   // -------------------------------------------------------------
   async getUsers(): Promise<User[]> {
     await this.ensureLoaded();
-    return this.data.users || [];
+    const users = this.data.users || [];
+    users.forEach((u) => {
+      if (u.role === 'admin' || u.username === 'admin') {
+        u.name = 'محمد عبدالله (المدير العام)';
+      }
+    });
+    return users;
   }
 
   async getUserById(id: string): Promise<User | null> {
     await this.ensureLoaded();
     const targetId = String(id).trim();
     const targetLower = targetId.toLowerCase();
-    return (
+    const user =
       this.data.users.find(
         (u) =>
           u.id === targetId ||
           u.id.toLowerCase() === targetLower ||
           u.username.toLowerCase() === targetLower
-      ) || null
-    );
+      ) || null;
+    if (user && (user.role === 'admin' || user.username === 'admin')) {
+      user.name = 'محمد عبدالله (المدير العام)';
+    }
+    return user;
   }
 
   async getUserByUsername(username: string): Promise<User | null> {
     await this.ensureLoaded();
     const target = username.toLowerCase().trim();
-    return this.data.users.find((u) => u.username.toLowerCase() === target) || null;
+    const user = this.data.users.find((u) => u.username.toLowerCase() === target) || null;
+    if (user && (user.role === 'admin' || user.username === 'admin')) {
+      user.name = 'محمد عبدالله (المدير العام)';
+    }
+    return user;
   }
 
   async createUser(user: Omit<User, 'id' | 'createdAt'>): Promise<User> {

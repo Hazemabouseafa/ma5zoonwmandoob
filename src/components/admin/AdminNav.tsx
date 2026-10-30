@@ -127,7 +127,7 @@ export default function AdminNav({ userName }: AdminNavProps) {
             </div>
             <div className="min-w-0">
               <div className="font-black text-sm sm:text-lg text-slate-800 leading-tight truncate">المراعي للتوزيع</div>
-              <div className="text-[10px] sm:text-[11px] text-emerald-600 font-semibold truncate hidden sm:block">تحت إدارة: أ/ محمود عبد الله</div>
+              <div className="text-[10px] sm:text-[11px] text-emerald-600 font-semibold truncate hidden sm:block">تحت إدارة: أ/ محمد عبدالله</div>
             </div>
           </div>
 
@@ -251,7 +251,7 @@ export default function AdminNav({ userName }: AdminNavProps) {
                 </div>
                 <div>
                   <h3 className="font-bold text-slate-900 text-sm">تغيير كلمة مرور المدير العام</h3>
-                  <div className="text-[11px] text-slate-500">حساب أ/ محمود عبد الله</div>
+                  <div className="text-[11px] text-slate-500">حساب أ/ محمد عبدالله</div>
                 </div>
               </div>
               <button
